@@ -117,7 +117,7 @@ export default function RootLayout({
       lang="en"
       className={`${poppins.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col"><ChatNotificationBadge />{children}</body>
+      <body className="min-h-full flex flex-col"><div className="invisible"><ChatNotificationBadge /></div>{children}</body>
     </html>
   );
 }

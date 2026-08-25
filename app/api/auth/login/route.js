@@ -16,11 +16,12 @@ export async function POST(request) {
       );
     }
 
-    // Try to find by email first, then by username
-    let user = await getUserByEmail(identifier);
-    if (!user) {
-      user = await getUserByUsername(identifier);
-    }
+    // ✅ FIX: Parallel database queries
+    const [userByEmail, userByUsername] = await Promise.all([
+      getUserByEmail(identifier),
+      getUserByUsername(identifier),
+    ]);
+    let user = userByEmail || userByUsername;
 
     if (!user) {
       return NextResponse.json(
@@ -29,7 +30,7 @@ export async function POST(request) {
       );
     }
 
-    // 🔒 CHECK ACCOUNT LOCKOUT
+    // Check lockout
     const now = new Date();
     if (user.lockUntil && new Date(user.lockUntil) > now) {
       return NextResponse.json(
@@ -42,20 +43,15 @@ export async function POST(request) {
     const isValid = await comparePassword(password, user.password);
     
     if (!isValid) {
-      // ❌ Handle failed attempt
       let attempts = (user.loginAttempts || 0) + 1;
       let lockUntil = null;
-      
-      // 🟢 Attempts reduced to 2
       let remaining = 1 - attempts;
 
       if (attempts >= 2) {
-        // 🔒 LOCK INDEFINITELY (Year 9999) until the Admin manually unlocks!
-        lockUntil = new Date('9999-12-31T23:59:59.999Z'); 
+        lockUntil = new Date('9999-12-31T23:59:59.999Z');
         remaining = '';
       }
 
-      // Update DB with new attempts and lockUntil
       await updateUser(user._id, { loginAttempts: attempts, lockUntil });
 
       return NextResponse.json(
@@ -68,10 +64,10 @@ export async function POST(request) {
       );
     }
 
-    // ✅ SUCCESS - Reset attempts
+    // Reset attempts
     await updateUser(user._id, { loginAttempts: 0, lockUntil: null });
 
-    // ✅ Generate JWT token
+    // Generate token
     const token = generateToken({
       id: user._id,
       email: user.email,
@@ -80,22 +76,22 @@ export async function POST(request) {
       lastName: user.lastName,
       role: user.role,
     });
- 
-    const refreshedToken = generateToken({
-      id: user._id,
-      email: user.email,
-      role: user.role,
-    }, { expiresIn: '1h' });
 
-    const sessionId = await saveSession({
-      userId: user._id.toString(),
-      username: user.username,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      displayName: user.displayName || user.username,
-      userAgent: request.headers.get('user-agent') || '',
-      ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown',
-    });
+    // Save session (optional - don't wait)
+    let sessionId = null;
+    try {
+      sessionId = await saveSession({
+        userId: user._id.toString(),
+        username: user.username,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        displayName: user.displayName || user.username,
+        userAgent: request.headers.get('user-agent') || '',
+        ipAddress: request.headers.get('x-forwarded-for') || 'unknown',
+      });
+    } catch (sessionError) {
+      console.warn('Session creation failed (non-critical):', sessionError.message);
+    }
 
     const { password: _, ...userWithoutPassword } = user;
     const userResponse = {
@@ -108,20 +104,21 @@ export async function POST(request) {
     const response = NextResponse.json({
       success: true,
       token,
-      refreshedToken,
       sessionId,
       user: userResponse,
-      remainingAttempts: 2, // reset to max attempts
+      remainingAttempts: 2,
     });
 
-    const isSecure = process.env.NODE_ENV === 'production';
-    response.cookies.set('sessionId', sessionId, {
-      httpOnly: true,
-      secure: isSecure,
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 3600, 
-    });
+    if (sessionId) {
+      const isSecure = process.env.NODE_ENV === 'production';
+      response.cookies.set('sessionId', sessionId, {
+        httpOnly: true,
+        secure: isSecure,
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 3600,
+      });
+    }
 
     return response;
 
