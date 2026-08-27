@@ -75,7 +75,7 @@ export default function UserSupportPage() {
         console.log('🔵 [Frontend] Fetching messages...');
         console.log('🔵 [Frontend] roomId:', roomId);
         
-        const res = await fetch(`/api/chats/rooms/${roomId}`, {
+        const res = await fetch(`/api/chats/messages/${roomId}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         
@@ -146,7 +146,21 @@ export default function UserSupportPage() {
   };
 
   if (currentUserId === null || token === null || !roomId) {
-    return <div className="min-h-screen bg-[#C4F8FD] p-6 flex items-center justify-center">a Chat room is being crated, please wait ...</div>;
+    return <div className="min-h-screen bg-gradient-to-br from-blue-200 via-cyan-100 to-gray-300 p-4 sm:p-6 lg:p-8">
+        <div className="mx-auto max-w-6xl space-y-4">
+          <div className="h-20 animate-pulse rounded-xl shadow-xl bg-[#C4F8FD]" />
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <div className="h-64 animate-pulse rounded-xl shadow-xl bg-[#C4F8FD]" />
+            <div className="h-64 animate-pulse rounded-xl shadow-xl bg-[#C4F8FD]" />
+            <div className="h-64 animate-pulse rounded-xl shadow-xl bg-[#C4F8FD]" />
+          </div>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <div className="h-64 animate-pulse rounded-xl shadow-xl bg-[#C4F8FD]" />
+            <div className="h-64 animate-pulse rounded-xl shadow-xl bg-[#C4F8FD]" />
+            <div className="h-64 animate-pulse rounded-xl shadow-xl bg-[#C4F8FD]" />
+          </div>
+        </div>
+      </div>;
   }
 
   return (

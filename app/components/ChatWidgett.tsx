@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { 
   MessageCircle, 
@@ -12,9 +12,14 @@ import {
   Shield,
   User,
   ShieldCheck,
-  Sparkles
+  Sparkles,
+  Paperclip,
+  Send,
+  Loader2,
+  Hourglass
 } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
+import { compressImage } from "@/lib/compressImage";
 
 interface ChatWidgetProps {
   supportName?: string;
@@ -22,6 +27,17 @@ interface ChatWidgetProps {
   defaultOpen?: boolean;
   supportHours?: string;
   responseTime?: string;
+}
+
+interface ChatMessage {
+  id: string;
+  senderId: string;
+  senderName?: string;
+  senderRole?: string;
+  message: string;
+  type: 'text' | 'image';
+  attachmentUrl?: string;
+  timestamp: string;
 }
 
 export default function ChatWidget({
@@ -40,8 +56,33 @@ export default function ChatWidget({
   const router = useRouter();
   const pathname = usePathname();
 
-  // Check if user is on a chat page
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [inputMessage, setInputMessage] = useState("");
+  const [sendingMessage, setSendingMessage] = useState(false);
+  const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
+  const [pendingReply, setPendingReply] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // ✅ NEW: Guest ID State
+  const [guestId, setGuestId] = useState<string | null>(null);
+
   const isOnChatPage = pathname?.includes('/Support/user') || pathname?.includes('/Support/admin') || false;
+
+  // ✅ NEW: Generate a temporary guest ID if user is not logged in
+  useEffect(() => {
+    const authToken = localStorage.getItem('auth_token');
+    const userData = localStorage.getItem('user');
+    
+    if (!authToken && !userData) {
+      let tempId = localStorage.getItem('guest_id');
+      if (!tempId) {
+        tempId = `guest_${crypto.randomUUID()}`;
+        localStorage.setItem('guest_id', tempId);
+      }
+      setGuestId(tempId);
+    }
+  }, []);
 
   useEffect(() => {
     setMounted(true);
@@ -63,107 +104,229 @@ export default function ChatWidget({
     }
   }, [defaultOpen]);
   
-  // 🟢 NEW: Auto-close popup after 2 seconds
   useEffect(() => {
     if (isOpen) {
       const timer = setTimeout(() => {
         setIsOpen(false);
-      }, 3000); // 2 seconds
+      }, 13000); 
       
       return () => clearTimeout(timer);
     }
   }, [isOpen]);
 
-  // 🟢 CRITICAL: Reset unread count when on chat page
+  // ✅ FIXED: Mark messages as read and clear unread count
   useEffect(() => {
-    if (isOnChatPage) {
-      console.log('🔵 [ChatWidget] On chat page - resetting unread count');
+    if (isOnChatPage || isOpen) {
       setUnreadCount(0);
+      
+      // ✅ Clear guest unread count from localStorage
+      const guestIdFromStorage = localStorage.getItem('guest_id');
+      if (guestIdFromStorage) {
+        localStorage.setItem(`guest_unread_${guestIdFromStorage}`, '0');
+      }
       
       const markMessagesAsRead = async () => {
         try {
           const authToken = localStorage.getItem('auth_token');
           if (!authToken) return;
+          if (!currentRoomId) return;
 
-          const roomId = localStorage.getItem('currentRoomId');
-          console.log('🔵 [ChatWidget] Room ID from localStorage:', roomId);
-          
-          if (roomId) {
-            const res = await fetch('/api/chats/mark-read', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${authToken}`
-              },
-              body: JSON.stringify({ roomId })
-            });
+          const res = await fetch(`/api/chats/mark-read`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${authToken}`
+            },
+            body: JSON.stringify({ roomId: currentRoomId })
+          });
             
-            console.log('🔵 [ChatWidget] Mark read response:', res.status);
-            
-            if (res.ok) {
-              console.log('✅ [ChatWidget] Messages marked as read successfully');
-            }
+          if (res.ok) {
+            console.log('✅ [ChatWidget] marked as read');
           }
         } catch (error) {
-          console.error('🔴 [ChatWidget] Error marking messages as read:', error);
+          console.error('🔴 [ChatWidget] messages not read:', error);
         }
       };
       
       markMessagesAsRead();
     }
-  }, [isOnChatPage]);
+  }, [isOnChatPage, isOpen, currentRoomId]);
 
-  // Fetch unread count - but ONLY when NOT on chat page
+  // ✅ FIXED: Enhanced unread count with guest support
   useEffect(() => {
-    if (!mounted || !userRole) return;
+    if (!mounted) return;
 
     const fetchUnreadCount = async () => {
       try {
         const authToken = localStorage.getItem('auth_token');
-        if (!authToken) return;
+        const guestIdFromStorage = localStorage.getItem('guest_id');
+        
+        // ✅ If no auth token and no guest ID, skip
+        if (!authToken && !guestIdFromStorage) {
+          setUnreadCount(0);
+          return;
+        }
 
-        const res = await fetch('/api/user/unread', {
-          headers: { 'Authorization': `Bearer ${authToken}` }
-        });
+        // ✅ If we're on the chat page, don't show unread
+        if (isOnChatPage) {
+          setUnreadCount(0);
+          return;
+        }
 
-        if (res.ok) {
-          const data = await res.json();
-          const count = data.data?.totalUnread || 0;
-          
-          if (!isOnChatPage) {
-            setUnreadCount(count);
-          } else {
-            setUnreadCount(0);
+        // ✅ For guests, check local storage for unread messages
+        if (!authToken && guestIdFromStorage) {
+          const storedUnread = localStorage.getItem(`guest_unread_${guestIdFromStorage}`);
+          const count = storedUnread ? parseInt(storedUnread) : 0;
+          setUnreadCount(count);
+          return;
+        }
+
+        // ✅ For authenticated users, fetch from server
+        if (authToken) {
+          const res = await fetch('/api/user/unread', {
+            headers: { 'Authorization': `Bearer ${authToken}` }
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            const count = data.data?.totalUnread || 0;
+            
+            if (!isOnChatPage) {
+              setUnreadCount(count);
+            } else {
+              setUnreadCount(0);
+            }
           }
         }
       } catch (error) {
         console.error('Error fetching unread count:', error);
+        // Don't set to 0 on error, keep previous value
       }
     };
 
     fetchUnreadCount();
-    const interval = setInterval(fetchUnreadCount, 3000);
+    
+    // ✅ Poll less frequently when chat is open
+    const interval = setInterval(fetchUnreadCount, isOpen ? 5000 : 3000);
     return () => clearInterval(interval);
-  }, [mounted, userRole, isOnChatPage]);
+  }, [mounted, isOnChatPage, isOpen]);
 
-  if (!mounted) return null;
+  // ✅ FIXED: Get or create room with guest support
+  useEffect(() => {
+    if (isOpen) {
+      const getRoom = async () => {
+        try {
+          const token = localStorage.getItem('auth_token');
+
+          // ✅ NEW: Send guestId to body if no auth token
+          const body = token ? {} : { guestId };
+
+          const res = await fetch('/api/chats/rooms', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': token ? `Bearer ${token}` : '' },
+            body: JSON.stringify(body)
+          });
+
+          const data = await res.json();
+          if (data.success) {
+            setCurrentRoomId(data.data.id);
+
+            const msgRes = await fetch(`/api/chats/messages/${data.data.id}`, {
+              // ✅ NEW: Send X-Guest-ID header if no auth token
+              headers: { 
+                'Authorization': token ? `Bearer ${token}` : '',
+                'X-Guest-ID': guestId || ''
+              }
+            });
+            const msgData = await msgRes.json();
+            if (msgData.success) {
+              setMessages(msgData.data || []);
+              
+              const lastMsg = msgData.data?.[msgData.data.length - 1];
+              if (lastMsg && lastMsg.senderRole === 'admin') {
+                setPendingReply(false);
+              } else if (lastMsg && lastMsg.senderRole !== 'admin') {
+                setPendingReply(true);
+              }
+            }
+          }
+        } catch (error) {
+          console.error("Error fetching room:", error);
+        }
+      };
+      getRoom();
+    }
+  }, [isOpen, guestId]);
+
+  // ✅ NEW: Poll for new messages for guests when chat is open
+  useEffect(() => {
+    if (!isOpen || !currentRoomId) return;
+    
+    const guestIdFromStorage = localStorage.getItem('guest_id');
+    if (!guestIdFromStorage) return;
+
+    const pollForNewMessages = async () => {
+      try {
+        const token = localStorage.getItem('auth_token');
+        const res = await fetch(`/api/chats/messages/${currentRoomId}`, {
+          headers: { 
+            'Authorization': token ? `Bearer ${token}` : '',
+            'X-Guest-ID': guestIdFromStorage
+          }
+        });
+        
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success) {
+            const newMessages = data.data || [];
+            if (newMessages.length > messages.length) {
+              // New messages arrived - check if any are from admin
+              const adminMessages = newMessages.filter(
+                (msg: ChatMessage, index: number) => index >= messages.length && msg.senderRole === 'admin'
+              );
+              
+              if (adminMessages.length > 0 && !isOpen) {
+                // If we're not in the chat, increment unread count
+                const storedUnread = localStorage.getItem(`guest_unread_${guestIdFromStorage}`);
+                const currentUnread = storedUnread ? parseInt(storedUnread) : 0;
+                const newUnread = currentUnread + adminMessages.length;
+                localStorage.setItem(`guest_unread_${guestIdFromStorage}`, String(newUnread));
+                setUnreadCount(newUnread);
+              }
+              
+              setMessages(newMessages);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error polling messages:', error);
+      }
+    };
+
+    const interval = setInterval(pollForNewMessages, 5000);
+    return () => clearInterval(interval);
+  }, [currentRoomId, isOpen, messages.length]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, pendingReply]);
 
   const getSupportPath = () => {
-    if (userRole === 'admin' || userRole === 'Administrator') {
+    if (userRole === 'admin' || userRole === 'Admin') {
       return '/Support/admin';
     }
     return '/Support/user';
   };
 
   const getRoleDisplay = () => {
-    if (userRole === 'admin' || userRole === 'Administrator') {
+    if (userRole === 'admin' || userRole === 'Admin') {
       return 'Admin Support';
     }
     return 'User Support';
   };
 
   const getRoleIcon = () => {
-    if (userRole === 'admin' || userRole === 'Administrator') {
+    if (userRole === 'admin' || userRole === 'Admin') {
       return <ShieldCheck className="h-4 w-4 text-cyan-600" />;
     }
     return <User className="h-4 w-4 text-cyan-600" />;
@@ -180,7 +343,107 @@ export default function ChatWidget({
     const path = getSupportPath();
     router.push(path);
     setUnreadCount(0);
+    const guestIdFromStorage = localStorage.getItem('guest_id');
+    if (guestIdFromStorage) {
+      localStorage.setItem(`guest_unread_${guestIdFromStorage}`, '0');
+    }
   };
+
+  // ✅ FIXED: Enhanced send message with unread clearing
+  const handleSendMessage = async () => {
+    if (!inputMessage.trim() || !currentRoomId || sendingMessage) return;
+
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    const token = localStorage.getItem('auth_token');
+    const guestIdFromStorage = localStorage.getItem('guest_id');
+
+    const tempId = `temp-${Date.now()}`;
+    setMessages(prev => [...prev, {
+      id: tempId,
+      senderId: user._id || guestIdFromStorage || 'guest',
+      message: inputMessage,
+      type: 'text',
+      timestamp: new Date().toISOString()
+    }]);
+    setInputMessage("");
+    setSendingMessage(true);
+    setPendingReply(true);
+
+    // ✅ Clear unread count when sending a message
+    setUnreadCount(0);
+    if (guestIdFromStorage) {
+      localStorage.setItem(`guest_unread_${guestIdFromStorage}`, '0');
+    }
+
+    try {
+      const res = await fetch(`/api/chats/messages/${currentRoomId}`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json', 
+          'Authorization': token ? `Bearer ${token}` : '',
+          'X-Guest-ID': guestIdFromStorage || ''
+        },
+        body: JSON.stringify({
+          message: inputMessage,
+          type: 'text'
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setMessages(prev => prev.map(msg => msg.id === tempId ? data.data : msg));
+      }
+    } catch (error) {
+      console.error("Error sending message:", error);
+    } finally {
+      setSendingMessage(false);
+    }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !currentRoomId) return;
+
+    const token = localStorage.getItem('auth_token');
+    const guestIdFromStorage = localStorage.getItem('guest_id');
+    setSendingMessage(true);
+    setPendingReply(true);
+
+    // ✅ Clear unread count when uploading image
+    setUnreadCount(0);
+    if (guestIdFromStorage) {
+      localStorage.setItem(`guest_unread_${guestIdFromStorage}`, '0');
+    }
+
+    try {
+      const compressedImage = await compressImage(file, 100, 400);
+
+      const res = await fetch(`/api/chats/messages/${currentRoomId}`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json', 
+          'Authorization': token ? `Bearer ${token}` : '',
+          'X-Guest-ID': guestIdFromStorage || ''
+        },
+        body: JSON.stringify({
+          type: 'image',
+          attachmentUrl: compressedImage
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setMessages(prev => [...prev, data.data]);
+      }
+    } catch (error) {
+      console.error("Error uploading image:", error);
+    } finally {
+      setSendingMessage(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  if (!mounted) return null;
 
   return (
     <div className="fixed bottom-24 right-4 z-50 flex flex-col items-end gap-3 sm:bottom-6 sm:right-6">
@@ -239,7 +502,6 @@ export default function ChatWidget({
                 </span>
               </div>
               
-              {/* 🟢 Unread Badge - Hidden on chat page */}
               {unreadCount > 0 && !isOnChatPage && (
                 <motion.div
                   initial={{ scale: 0 }}
@@ -270,6 +532,79 @@ export default function ChatWidget({
                 <span className="absolute -bottom-4 right-3 text-4xl text-cyan-400/30 font-serif">"</span>
               </div>
             </motion.div>
+
+            {/* Mini-Chat UI */}
+            {currentRoomId && (
+              <>
+                <div className="mt-3 flex flex-col gap-2 max-h-40 overflow-y-auto pr-1 bg-white/20 rounded-xl p-2">
+                  {messages.length === 0 && (
+                    <p className="text-center text-xs text-cyan-600 py-4">Start the conversation!</p>
+                  )}
+                  {messages.map((msg) => (
+                    <div 
+                      key={msg.id} 
+                      className={`flex ${msg.senderId === (JSON.parse(localStorage.getItem('user') || '{}')._id || guestId) ? 'justify-end' : 'justify-start'}`}
+                    >
+                      <div className={`max-w-[80%] rounded-2xl px-3 py-2 shadow-sm ${
+                        msg.senderId === (JSON.parse(localStorage.getItem('user') || '{}')._id || guestId)
+                          ? 'bg-cyan-600 text-white'
+                          : 'bg-white text-cyan-900'
+                      }`}>
+                        {msg.type === 'image' ? (
+                          <img src={msg.attachmentUrl} alt="Shared" className="max-w-full max-h-40 rounded-lg object-cover" />
+                        ) : (
+                          <p className="text-xs">{msg.message}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  
+                  {pendingReply && (
+                    <div className="flex justify-center">
+                      <div className="flex items-center gap-1.5 bg-amber-100/80 text-amber-700 rounded-full px-3 py-1 text-[10px] font-medium">
+                        <Hourglass size={12} />
+                        Your message has been sent. Please wait for a reply.
+                      </div>
+                    </div>
+                  )}
+                  <div ref={messagesEndRef} />
+                </div>
+
+                {/* Chat Inputs */}
+                <div className="mt-3 flex items-center gap-2">
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    className="hidden" 
+                    ref={fileInputRef}
+                    onChange={handleImageUpload}
+                  />
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="p-2 rounded-full bg-white/40 hover:bg-white/60 transition-colors"
+                    aria-label="Upload image"
+                  >
+                    <Paperclip size={16} className="text-cyan-700" />
+                  </button>
+                  <input
+                    type="text"
+                    value={inputMessage}
+                    onChange={(e) => setInputMessage(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                    placeholder="Type a message..."
+                    className="flex-1 bg-white/50 rounded-xl px-4 py-2 text-xs text-cyan-900 placeholder:text-cyan-500 focus:outline-none border border-white/30"
+                  />
+                  <button
+                    onClick={handleSendMessage}
+                    disabled={sendingMessage || !inputMessage.trim()}
+                    className="p-2 rounded-full bg-cyan-600 text-white disabled:opacity-50"
+                    aria-label="Send message"
+                  >
+                    {sendingMessage ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                  </button>
+                </div>
+              </>
+            )}
 
             {/* Features */}
             <motion.div
@@ -312,18 +647,6 @@ export default function ChatWidget({
                 onClick={handleStartChat}
                 className="group w-full rounded-2xl bg-[#C4F8FD] px-6 py-3.5 text-sm font-semibold text-cyan-700 shadow-lg transition-all hover:shadow-xl hover:from-cyan-700 hover:to-cyan-800 flex items-center justify-center gap-2 relative overflow-hidden"
               >
-                {/* 🟢 Unread Badge on Button - Hidden on chat page */}
-                {unreadCount > 0 && !isOnChatPage && (
-                  <motion.span
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    className="absolute -top-1 -right-1 flex items-center justify-center h-5 min-w-[20px] rounded-full bg-red-500 px-1.5 shadow-lg"
-                  >
-                    <span className="text-[9px] font-bold text-[#C4F8FD]">
-                      {unreadCount > 99 ? '99+' : unreadCount}
-                    </span>
-                  </motion.span>
-                )}
                 <span>
                   {userRole === 'admin' || userRole === 'Administrator' 
                     ? 'Chat with Ashie' 
@@ -351,7 +674,6 @@ export default function ChatWidget({
         aria-expanded={isOpen}
         className="relative flex h-14 w-14 items-center justify-center rounded-full shadow-xl bg-[#C4F8FD] transition-all hover:shadow-2xl focus:outline-none"
       >
-        {/* 🟢 Pulse Ring - Hidden on chat page */}
         {!isOpen && unreadCount > 0 && !isOnChatPage && (
           <span className="absolute inset-0 rounded-full animate-ping bg-red-500/40" />
         )}
@@ -379,14 +701,14 @@ export default function ChatWidget({
             >
               <MessageCircle size={22} className='text-cyan-600' fill="currentColor" />
               
-              {/* 🟢 Numeral Badge on Floating Button - Hidden on chat page */}
               {unreadCount > 0 && !isOnChatPage && (
                 <motion.span
+                  key="unread-badge"
                   initial={{ scale: 0, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   exit={{ scale: 0, opacity: 0 }}
                   transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                  className="absolute -top-1.5 -right-1.5 flex items-center justify-center h-5 min-w-[20px] rounded-full bg-red-500 px-1.5 shadow-lg border-none"
+                  className="absolute -top-1.5 -right-1.5 flex items-center justify-center h-5 min-w-[20px] rounded-full bg-red-500 px-1.5 shadow-lg border-none z-50"
                 >
                   <span className="text-[9px] font-bold text-[#C4F8FD] leading-none">
                     {unreadCount > 99 ? '99+' : unreadCount}

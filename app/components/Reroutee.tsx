@@ -44,6 +44,8 @@
 
 "use client";
 
+"use client";
+
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -152,6 +154,38 @@ const itemVariants = {
 };
 
 // ============================================================================
+// LAZY LOADING SKELETON
+// ============================================================================
+
+function PriceSkeleton() {
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+      {PRICE_SYMBOLS.map((item) => (
+        <div
+          key={item.id}
+          className={`${item.cardColor} p-4 rounded-2xl shadow-xl backdrop-blur-sm`}
+        >
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-lg bg-white/20 animate-pulse" />
+              <div>
+                <div className="h-4 w-12 bg-white/20 rounded animate-pulse" />
+                <div className="h-3 w-16 bg-white/20 rounded mt-1 animate-pulse" />
+              </div>
+            </div>
+            <div className="h-6 w-14 bg-white/20 rounded-full animate-pulse" />
+          </div>
+          <div className="mt-4">
+            <div className="h-8 w-24 bg-white/20 rounded animate-pulse" />
+            <div className="h-3 w-16 bg-white/20 rounded mt-2 animate-pulse" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ============================================================================
 // MAIN COMPONENT
 // ============================================================================
 
@@ -177,14 +211,6 @@ export default function RealTimePrices() {
     };
   }, []);
 
-
-
-
-
-
-
-  
-
   const fetchPrices = async (isManualRefresh = false) => {
     if (isManualRefresh) {
       setIsRefreshing(true);
@@ -199,11 +225,9 @@ export default function RealTimePrices() {
         `/api/prices?ids=${ids}&vs_currencies=usd&include_24hr_change=true&include_24hr_high=true&include_24hr_low=true&include_24hr_vol=true`
       );
 
-      if (!response.ok) {
-        if (response.status === 429) {
-          throw new Error("Rate limit exceeded. Please wait a moment.");
-        }
-        throw new Error(`API error: ${response.status}`);
+      // ✅ NEW: Check if content-type is JSON, if not, throw error
+      if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
+        throw new Error("Server not available at this time");
       }
 
       const data: PriceResponse = await response.json();
@@ -236,7 +260,8 @@ export default function RealTimePrices() {
     } catch (err) {
       console.error("Error fetching prices:", err);
       if (isMountedRef.current) {
-        setError(err instanceof Error ? err.message : "Failed to fetch prices");
+        // ✅ NEW: Set the specific error message
+        setError("Server not available at this time");
 
         retryCountRef.current += 1;
         const delay = Math.min(5000 * Math.pow(1.5, retryCountRef.current - 1), 30000);
@@ -259,7 +284,10 @@ export default function RealTimePrices() {
   };
 
   useEffect(() => {
-    fetchPrices(false);
+    // 🚀 LAZY LOADING: Wait 300ms before fetching initial data
+    const loadTimer = setTimeout(() => {
+      fetchPrices(false);
+    }, 300);
 
     const interval = setInterval(() => {
       if (isMountedRef.current && isLive) {
@@ -268,6 +296,7 @@ export default function RealTimePrices() {
     }, 60000);
 
     return () => {
+      clearTimeout(loadTimer);
       clearInterval(interval);
       if (retryTimeoutRef.current) {
         clearTimeout(retryTimeoutRef.current);
@@ -368,9 +397,8 @@ export default function RealTimePrices() {
 
         {/* Price Grid */}
         {isLoading && prices.length === 0 ? (
-          <div className="flex h-48 items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin text-cyan-700" />
-          </div>
+          // ✅ NEW: Show beautiful skeleton instead of just spinner
+          <PriceSkeleton />
         ) : (
           <motion.div
             variants={containerVariants}

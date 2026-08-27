@@ -39,7 +39,7 @@ export default function PrivacySecurityPage() {
 
   return (
     // Page Wrapper
-    <div className="min-h-screen w-full bg-gradient-to-br from-blue-200 via-cyan-100 to-gray-300 p-4 text-[#0a0e17] flex items-center justify-center">
+    <div className="min-h-screen w-full bg-bg-[#C4F8FD] p-4 text-[#0a0e17] flex items-center justify-center">
       
       {/* Modal Component */}
       <motion.div

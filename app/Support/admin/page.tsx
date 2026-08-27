@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence, Variants } from "framer-motion";
 import { ArrowLeft, Send, User as UserIcon, Bell } from "lucide-react";
 import AdminChatManager from '@/app/components/AdminChatManager'
+import { ForceMarkReadButton } from '@/app/components/ForceMarkReadButton' // ✅ ADDED IMPORT
 
 interface ChatUser {
   _id: string;
@@ -104,7 +105,7 @@ export default function AdminSupportPage() {
     
     const fetchMessages = async () => {
       try {
-        const res = await fetch(`/api/chats/rooms/${roomId}`, {
+        const res = await fetch(`/api/chats/messages/${roomId}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (!res.ok) {
@@ -157,7 +158,21 @@ export default function AdminSupportPage() {
   };
 
   if (currentUserId === null || token === null) {
-    return <div className="min-h-screen bg-[#C4F8FD] p-6 flex items-center justify-center">Loading session...</div>;
+    return <div className="min-h-screen bg-gradient-to-br from-blue-200 via-cyan-100 to-gray-300 p-4 sm:p-6 lg:p-8">
+    <div className="mx-auto max-w-6xl space-y-4">
+      <div className="h-20 animate-pulse rounded-xl shadow-xl bg-[#C4F8FD]" />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="h-64 animate-pulse rounded-xl shadow-xl bg-[#C4F8FD]" />
+        <div className="h-64 animate-pulse rounded-xl shadow-xl bg-[#C4F8FD]" />
+        <div className="h-64 animate-pulse rounded-xl shadow-xl bg-[#C4F8FD]" />
+      </div>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="h-64 animate-pulse rounded-xl shadow-xl bg-[#C4F8FD]" />
+        <div className="h-64 animate-pulse rounded-xl shadow-xl bg-[#C4F8FD]" />
+        <div className="h-64 animate-pulse rounded-xl shadow-xl bg-[#C4F8FD]" />
+      </div>
+    </div>
+  </div>;
   }
 
   if (!selectedUserId) {
@@ -323,25 +338,54 @@ export default function AdminSupportPage() {
           </AnimatePresence>
           <div ref={messagesEndRef} />
         </div>
+
+        {/* ✅ ADDED: Force Mark Read Button - Placed between messages and input */}
+        <div className="px-4 py-2 border-t border-cyan-200/30 bg-white/5 backdrop-blur-sm">
+          <div className="flex items-center justify-between gap-4">
+            <ForceMarkReadButton 
+              roomId={roomId}
+              onSuccess={() => {
+                console.log('✅ Force marked all messages as read!');
+                // Refresh messages to update UI
+                if (roomId && token) {
+                  fetch(`/api/chats/messages/${roomId}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                  })
+                    .then(res => res.json())
+                    .then(data => {
+                      if (data.success) {
+                        setMessages(data.data || []);
+                      }
+                    })
+                    .catch(console.error);
+                }
+              }}
+            />
+            <p className="text-xs text-cyan-600/70 hidden sm:block">
+              Mark ALL messages as read for everyone
+            </p>
+          </div>
+        </div>
       </div>
-       <div className="p-4 border-t border-cyan-200/30 bg-white/10 backdrop-blur-sm flex gap-3 flex-shrink-0">
-       <textarea
-         value={inputMessage}
-         onChange={(e) => setInputMessage(e.target.value)}
-         onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-         placeholder="Type a message..."
-         className="flex-1 rounded-full bg-[#C4F8FD] px-4 py-3 text-sm text-cyan-900
-         placeholder:text-cyan-900 placeholder:font-semibold focus:outline-none border-none shadow-xl shadow-inner-xl resize-none h-10 sm:h-auto"
-         rows={1}
-       />
-       <motion.button 
-         whileHover={{ scale: 1.05 }}
-         whileTap={{ scale: 0.95 }}
-         onClick={sendMessage} 
-         className="bg-[#C4F8FD] border border-cyan-200/50 text-cyan-700 p-3 rounded-full shadow-lg hover:bg-white transition-all flex-shrink-0"
-       >
-         <Send size={20} />
-       </motion.button>
+      
+      <div className="p-4 border-t border-cyan-200/30 bg-white/10 backdrop-blur-sm flex gap-3 flex-shrink-0">
+        <textarea
+          value={inputMessage}
+          onChange={(e) => setInputMessage(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
+          placeholder="Type a message..."
+          className="flex-1 rounded-full bg-[#C4F8FD] px-4 py-3 text-sm text-cyan-900
+          placeholder:text-cyan-900 placeholder:font-semibold focus:outline-none border-none shadow-xl shadow-inner-xl resize-none h-10 sm:h-auto"
+          rows={1}
+        />
+        <motion.button 
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={sendMessage} 
+          className="bg-[#C4F8FD] border border-cyan-200/50 text-cyan-700 p-3 rounded-full shadow-lg hover:bg-white transition-all flex-shrink-0"
+        >
+          <Send size={20} />
+        </motion.button>
       </div>
     </motion.div>
   );

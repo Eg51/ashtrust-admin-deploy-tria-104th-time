@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
-import ChatNotificationBadge from '@/app/components/ChatNotificationBadge';
+
 const poppins = localFont({
   src: [
     {
@@ -102,8 +102,31 @@ const poppins = localFont({
 export const metadata: Metadata = {
   title: 'AshTrust Bank',
   description: 'Modern Banking. Timeless Trust.',
+  keywords: ["finance", "investments", "bills", "crypto", "banking"],
   icons: {
     icon: '/favicon.ico',
+    apple: '/apple-touch-icon.png',
+  },
+  openGraph: {
+    title: 'AshTrust Bank',
+    description: 'Modern Banking. Timeless Trust.',
+    url: "https://just-deploy-rho.vercel.app",
+    siteName: "AshTrust Bank",
+    images: [
+      {
+        url: "https://just-deploy-rho.vercel.app.png", // ✅ Replace with actual URL
+        width: 1200,
+        height: 630,
+        alt: "AshTrust Bank Preview",
+      },
+    ],
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: 'AshTrust Bank',
+    description: 'Modern Banking. Timeless Trust.',
+    images: ["https://just-deploy-rho.vercel.app/og-image.png"], // ✅ Replace with actual URL
   },
 };
 
@@ -121,5 +144,3 @@ export default function RootLayout({
     </html>
   );
 }
-
-

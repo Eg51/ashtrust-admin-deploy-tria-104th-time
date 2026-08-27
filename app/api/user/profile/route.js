@@ -311,7 +311,7 @@ export async function PUT(request) {
       const avatarSizeKB = Math.round((avatar.length * 3) / 4 / 1024);
       if (avatarSizeKB > 120) {
         return NextResponse.json(
-          { success: false, error: 'Avatar must be under 100KB' },
+          { success: false, error: 'uploads must be under 100KB' },
           { status: 400 }
         );
       }

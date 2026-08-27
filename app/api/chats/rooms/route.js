@@ -1,7 +1,7 @@
 // app/api/chats/rooms/route.js
 import { NextResponse } from 'next/server';
 import { getUserChatRooms, getOrCreateChatRoom } from '@/lib/db/chats';
-import { getUsersCollection } from '@/lib/mongodb'; // Import your users collection helper
+import { getUsersCollection } from '@/lib/mongodb';
 import { verifyToken, extractToken } from '@/lib/security';
 
 export const runtime = 'nodejs';
@@ -51,64 +51,56 @@ export async function POST(request) {
   try {
     const authHeader = request.headers.get('authorization');
     const token = extractToken(authHeader);
-    
-    if (!token) {
-      return NextResponse.json(
-        { success: false, error: 'Authentication required' },
-        { status: 401 }
-      );
+    let userId = null;
+    let isGuest = false;
+
+    // ✅ If a valid token exists, use the real user ID
+    if (token) {
+      const decoded = verifyToken(token);
+      if (decoded) {
+        userId = decoded.id || decoded.userId;
+      }
     }
 
-    const decoded = verifyToken(token);
-    if (!decoded) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid token' },
-        { status: 401 }
-      );
-    }
-
-    const userId = decoded.id || decoded.userId;
-    const body = await request.json();
-    const { targetUserId } = body;
-
-    // --- NEW AUTOMATIC ADMIN DETECTION LOGIC ---
-    let realTargetId = targetUserId;
-
-    // If the user passed "admin" as the target, the backend fetches the dynamic admin ID
-    if (targetUserId === "admin" || !targetUserId) {
-      const usersCollection = await getUsersCollection();
-      const adminUser = await usersCollection.findOne({ role: 'admin' }); // Or { isAdmin: true } depending on your DB schema
-      
-      if (!adminUser) {
+    // ✅ If no token, check for a Guest ID in the body
+    if (!userId) {
+      const body = await request.json();
+      if (body.guestId) {
+        userId = body.guestId; // Use the guest ID as the user ID
+        isGuest = true;
+      } else {
         return NextResponse.json(
-          { success: false, error: 'Admin user not found' },
-          { status: 404 }
+          { success: false, error: 'Authentication required' },
+          { status: 401 }
         );
       }
-      realTargetId = adminUser._id.toString();
     }
-    // --- END NEW LOGIC ---
 
-    const isAdmin = decoded.role === 'admin' || decoded.isAdmin;
-    const adminId = isAdmin ? userId : null;
-    const userParticipantId = isAdmin ? realTargetId : userId;
+    // Get Admin's actual ID from the database
+    const usersCollection = await getUsersCollection();
+    const adminUser = await usersCollection.findOne({ role: 'admin' });
 
-    // Note: We pass userParticipantId and adminId to your existing helper
-    const room = await getOrCreateChatRoom(userParticipantId, adminId || realTargetId);
+    if (!adminUser) {
+      return NextResponse.json(
+        { success: false, error: 'Admin user not found' },
+        { status: 404 }
+      );
+    }
+
+    const adminId = adminUser._id.toString();
+
+    // Create or fetch the room (Works for both real users and guests)
+    const room = await getOrCreateChatRoom(userId, adminId);
 
     return NextResponse.json({
       success: true,
-      data: {
-        ...room,
-        id: room._id.toString(),
-        _id: undefined,
-      },
+      data: { ...room, id: room._id.toString(), _id: undefined },
     });
-
+    
   } catch (error) {
     console.error('Error creating chat room:', error);
     return NextResponse.json(
-      { success: false, error: 'Internal error' },
+      { success: false, error: 'Internal error: ' + error.message },
       { status: 500 }
     );
   }

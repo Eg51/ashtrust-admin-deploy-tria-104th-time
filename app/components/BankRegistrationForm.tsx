@@ -235,7 +235,7 @@ function SuccessCard({ email, username, onClose, onLogin, onDashboard }: Success
       initial="hidden"
       animate="visible"
       exit="exit"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-md p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center shadow-xl bg-[#C4F8FD] backdrop-blur-md p-4"
       onClick={onClose}
     >
       <motion.div
@@ -243,13 +243,12 @@ function SuccessCard({ email, username, onClose, onLogin, onDashboard }: Success
         initial="hidden"
         animate="visible"
         exit="exit"
-        className="relative w-full max-w-md overflow-hidden rounded-2xl bg-slate-300 p-8 shadow-xl border border-white/30"
+        className="relative w-full max-w-md overflow-hidden rounded-2xl p-8 shadow-xl bg-[#C4F8FD] border-none"
         onClick={(e) => e.stopPropagation()}
       >
         <button
           onClick={onClose}
-          className="absolute right-4 top-4 rounded-full p-1 text-slate-600 hover:bg-white/20 hover:text-slate-800 transition-colors"
-          aria-label="Close"
+          className="absolute right-4 top-4 rounded-full p-1 text-cyan-700 shadow-xl bg-[#C4F8FD] hover:bg-cyan-700 hover:text-[#C4F8FD] transition-colors"
         >
           <X size={20} />
         </button>
@@ -289,7 +288,7 @@ function SuccessCard({ email, username, onClose, onLogin, onDashboard }: Success
             variants={successTextVariants}
             initial="hidden"
             animate="visible"
-            className="mt-4 w-full rounded-xl bg-white/50 p-4 backdrop-blur-sm border border-white/30"
+            className="mt-4 w-full rounded-xl bg-[#C4F8FD] shadow-md p-4 backdrop-blur-sm border border-none"
           >
             <p className="text-xs text-slate-700">
               <span className="font-semibold">Email:</span> {email}
@@ -329,15 +328,15 @@ function SuccessCard({ email, username, onClose, onLogin, onDashboard }: Success
             animate="visible"
             className="mt-4 w-full"
           >
-            <p className="text-xs text-slate-500 mb-2">
+            <p className="text-xs text-cyan-700 mb-2">
               logging in...
             </p>
-            <div className="h-1 w-full overflow-hidden rounded-full bg-white/50">
+            <div className="h-1 w-full overflow-hidden rounded-full bg-[#C4F8FD]">
               <motion.div
                 initial={{ width: "100%" }}
                 animate={{ width: "0%" }}
                 transition={{ duration: 2, ease: "linear" }}
-                className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-blue-600"
+                className="h-full rounded-full bg-[#C4F8FD]"
               />
             </div>
           </motion.div>
@@ -457,7 +456,7 @@ function ExistingAccountBanner({ email, onClose, onStayHere }: ExistingAccountBa
 
           <div className="mt-4 w-full rounded-xl bg-white/60 p-4 backdrop-blur-sm border border-amber-200/50">
             <p className="text-xs text-amber-700">
-              Please log in to continue or register with a different email.
+              Please log in or register with a different email to continue.
             </p>
           </div>
 

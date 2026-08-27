@@ -56,7 +56,7 @@
    "app/api/user/avatar/route.js",
    "app/components/DesktopNav.tsx",
    "app/components/DesktopNav.tsx"
-  ],
+, "app/api/track/route.js"  ],
   "exclude": [
   ]
 }

@@ -110,7 +110,7 @@ export default function AdminDashboard() {
 
     } catch (error) {
       console.error('Error fetching admin data:', error);
-      setError('Failed to load dashboard data. Please try again.');
+      setError('Failed to load contents. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -320,14 +320,21 @@ function EditModal({ item, onSave, onCancel, onChange }: { item: DashDataItem; o
 // ---- Skeleton Loading -----------------------------------------------------
 function AdminDashboardSkeleton() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-200 via-cyan-100 to-gray-300 p-4 sm:p-6">
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-8"><div className="h-10 w-48 animate-pulse rounded-xl bg-[#C4F8FD]" /><div className="mt-2 h-5 w-32 animate-pulse rounded bg-[#C4F8FD]" /></div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {[...Array(4)].map((_, i) => (<div key={i} className="h-24 animate-pulse rounded-2xl bg-[#C4F8FD]" />))}
+    <div className="min-h-screen bg-gradient-to-br from-blue-200 via-cyan-100 to-gray-300 p-4 sm:p-6 lg:p-8">
+        <div className="mx-auto max-w-6xl space-y-4">
+          <div className="h-20 animate-pulse rounded-xl shadow-xl bg-[#C4F8FD]" />
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3"><div className="h-64 animate-pulse rounded-xl shadow-xl bg-[#C4F8FD]" /><div className="h-64 animate-pulse rounded-xl shadow-xl bg-[#C4F8FD]" /><div className="h-64 animate-pulse rounded-xl shadow-xl bg-[#C4F8FD]" /></div>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3"><div className="h-64 animate-pulse rounded-xl shadow-xl bg-[#C4F8FD]" /><div className="h-64 animate-pulse rounded-xl shadow-xl bg-[#C4F8FD]" /><div className="h-64 animate-pulse rounded-xl shadow-xl bg-[#C4F8FD]" /></div>
         </div>
-        <div className="mt-8"><div className="mb-4 flex gap-4"><div className="h-10 w-24 animate-pulse rounded bg-[#C4F8FD]" /><div className="h-10 w-24 animate-pulse rounded bg-[#C4F8FD]" /><div className="h-10 w-24 animate-pulse rounded bg-[#C4F8FD]" /></div><div className="h-96 animate-pulse rounded-2xl bg-[#C4F8FD]" /></div>
       </div>
-    </div>
+    // <div className="min-h-screen bg-gradient-to-br from-blue-200 via-cyan-100 to-gray-300 p-4 sm:p-6">
+    //   <div className="mx-auto max-w-7xl">
+    //     <div className="mb-8"><div className="h-10 w-48 animate-pulse rounded-xl bg-[#C4F8FD]" /><div className="mt-2 h-5 w-32 animate-pulse rounded bg-[#C4F8FD]" /></div>
+    //     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    //       {[...Array(4)].map((_, i) => (<div key={i} className="h-24 animate-pulse rounded-2xl bg-[#C4F8FD]" />))}
+    //     </div>
+    //     <div className="mt-8"><div className="mb-4 flex gap-4"><div className="h-10 w-24 animate-pulse rounded bg-[#C4F8FD]" /><div className="h-10 w-24 animate-pulse rounded bg-[#C4F8FD]" /><div className="h-10 w-24 animate-pulse rounded bg-[#C4F8FD]" /></div><div className="h-96 animate-pulse rounded-2xl bg-[#C4F8FD]" /></div>
+    //   </div>
+    // </div>
   );
 }
