@@ -10,6 +10,8 @@ import Tracker from '@/app/components/Tracker'
 import { useSessionTracker } from '@/hooks/useSessionTracker'
 import Activator from '@/app/components/Activator'
 // import AdminUserManager from '@/app/components/AdminUserManager';
+import AdminWithdrawalList from '@/app/components/AdminWithdrawalList';
+
 
 // ✅ ADDED: AdminDashboardSkeleton
 function AdminDashboardSkeleton() {
@@ -45,6 +47,7 @@ export default function Page() {
 
   return (
     <div> 
+      <AdminWithdrawalList/>
       <AdminDashboard/>
       {/* <AdminUserManager/> */}
       <ChatWidgett

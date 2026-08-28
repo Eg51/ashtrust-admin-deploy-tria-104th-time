@@ -315,6 +315,7 @@ export const config = {
   matcher: [
     // Apply to all API routes and protected pages
     '/api/:path*',
+    '/Account/:path*',
     '/Dashboard/:path*',
     '/Bills/:path*',
     '/Cards/:path*',

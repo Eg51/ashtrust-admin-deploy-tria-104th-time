@@ -18,6 +18,68 @@ import {
   ChevronRight,
 } from "lucide-react";
 import Link from "next/link";
+import WithdrawalReceiptModal from '@/app/components/WithdrawalReceiptModal';
+
+// ============================================================================
+// CURRENCY FORMATTING HELPER
+// ============================================================================
+
+const formatCurrency = (value: string | number): string => {
+  if (!value) return '0.00';
+  const num = typeof value === 'string' ? parseFloat(value) : value;
+  if (isNaN(num)) return '0.00';
+  return num.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+};
+
+// ============================================================================
+// SAFE RANDOM GENERATORS
+// ============================================================================
+
+/**
+ * Generate a cryptographically secure random string
+ * ✅ Safe for React/Next.js - uses crypto.getRandomValues()
+ */
+const generateSecureRandom = (length: number = 8): string => {
+  const array = new Uint8Array(length);
+  crypto.getRandomValues(array);
+  return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+};
+
+/**
+ * Generate a unique ID with timestamp + secure random
+ * ✅ Safe - combines timestamp with crypto random
+ */
+const generateUniqueId = (prefix: string = ''): string => {
+  const timestamp = Date.now().toString(36);
+  const random = generateSecureRandom(6);
+  return `${prefix}${timestamp}_${random}`;
+};
+
+/**
+ * Generate a withdrawal reference
+ * ✅ Safe - uses crypto random + timestamp
+ */
+const generateWithdrawalReference = (): string => {
+  const timestamp = Date.now().toString().slice(-6);
+  const random = generateSecureRandom(4);
+  return `AshTrust REF:${timestamp}${random.toUpperCase()}`;
+};
+
+/**
+ * Generate a random 16-digit card number
+ * ✅ Safe - uses crypto random for each digit
+ */
+const generateRandomCardNumber = (): string => {
+  let num = '';
+  for (let i = 0; i < 16; i++) {
+    const randomDigit = crypto.getRandomValues(new Uint8Array(1))[0] % 10;
+    num += randomDigit.toString();
+  }
+  return num;
+};
 
 // ============================================================================
 // TYPES
@@ -53,7 +115,7 @@ interface Bill {
 const cards: CardData[] = [
   {
     id: "1",
-    type: "physical",
+    type: "virtual",
     number: "4532 7891 2345 6789",
     expires: "12/28",
     brand: "visa",
@@ -64,7 +126,7 @@ const cards: CardData[] = [
     type: "virtual",
     number: "9876 5432 1098 7654",
     expires: "09/25",
-    username: "JOHN.DOE",
+    username: "....",
     brand: "visa",
     isActive: true,
   },
@@ -166,7 +228,7 @@ const CardDisplay = memo(({
                 onToggleVisibility();
               }}
               className="rounded-full bg-white/20 p-1.5 text-white transition-colors hover:bg-white/30"
-              aria-label="Toggle card number visibility"
+              
             >
               {isNumberVisible ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
@@ -183,7 +245,7 @@ const CardDisplay = memo(({
             </div>
             {card.type === "physical" && (
               <div className="rounded-lg bg-white/20 px-3 py-1">
-                <p className="text-xs font-medium text-white">VISA</p>
+                <p className="text-xs font-medium text-white">PREMIUM</p>
               </div>
             )}
           </div>
@@ -195,7 +257,7 @@ const CardDisplay = memo(({
 CardDisplay.displayName = 'CardDisplay';
 
 // ============================================================================
-// WITHDRAWAL MODAL
+// WITHDRAWAL MODAL - UPDATED TO READ FROM DATABASE WITH MULTIPLE ACCOUNTS
 // ============================================================================
 
 interface WithdrawalModalProps {
@@ -203,33 +265,79 @@ interface WithdrawalModalProps {
   onClose: () => void;
   onWithdraw: (data: any) => void;
   pendingBills: Bill[];
+  userWithdrawalDetails?: {
+    bankName: string;
+    accountName: string;
+    accountNumber: string;
+    swiftCode?: string;
+    iban?: string;
+    walletAddress?: string;
+    network?: string;
+    accounts?: any[];
+  } | null;
+  withdrawalAmount?: string;
 }
 
-const adminWithdrawalDetails = {
-  bank: { bankName: "First Bank", accountName: "Lumina Finance", accountNumber: "0123456789" },
-  crypto: { walletAddress: "0x742d35Cc6634C0532925a3b844Bc9...", network: "Ethereum (ERC-20)" },
-};
-
-const WithdrawalModal = ({ isOpen, onClose, onWithdraw, pendingBills }: WithdrawalModalProps) => {
+const WithdrawalModal = ({ 
+  isOpen, 
+  onClose, 
+  onWithdraw, 
+  pendingBills,
+  userWithdrawalDetails,
+  withdrawalAmount = "0.00"
+}: WithdrawalModalProps) => {
   const [paymentMethod, setPaymentMethod] = useState<"bank" | "crypto">("bank");
+  const [selectedAccountId, setSelectedAccountId] = useState<string>("");
+
+  // ✅ Set default selected account when modal opens
+  useEffect(() => {
+    if (isOpen && userWithdrawalDetails?.accounts && userWithdrawalDetails.accounts.length > 0) {
+      const defaultAcc = userWithdrawalDetails.accounts.find((a: any) => a.isDefault) || userWithdrawalDetails.accounts[0];
+      setSelectedAccountId(defaultAcc.id);
+    }
+  }, [isOpen, userWithdrawalDetails?.accounts]);
 
   if (!isOpen) return null;
 
   const allPaid = pendingBills.length === 0;
+
+  const bankDetails = userWithdrawalDetails || {
+    bankName: "Not Set",
+    accountName: "Not Set",
+    accountNumber: "Not Set",
+    swiftCode: "Not Set",
+    iban: "Not Set",
+    walletAddress: "Not Set",
+    network: "Not Set",
+    accounts: [],
+  };
+
+  // ✅ Get the selected account details
+  const selectedAccount = userWithdrawalDetails?.accounts?.find(
+    (acc: any) => acc.id === selectedAccountId
+  ) || userWithdrawalDetails?.accounts?.[0] || {
+    bankName: bankDetails.bankName,
+    accountName: bankDetails.accountName,
+    accountNumber: bankDetails.accountNumber,
+    swiftCode: bankDetails.swiftCode,
+  };
+
+  // ✅ Format the amount for display
+  const formattedAmount = formatCurrency(withdrawalAmount);
 
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-md"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 shadow-xl p-4 backdrop-blur-md"
       onClick={onClose}
     >
       <motion.div
         initial={{ scale: 0.9, y: 20 }}
         animate={{ scale: 1, y: 0 }}
         exit={{ scale: 0.9, y: 20 }}
-        className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6 shadow-2xl border border-white/10"
+        className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-black/60 p-6 shadow-2xl border border-white/10"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
@@ -247,7 +355,7 @@ const WithdrawalModal = ({ isOpen, onClose, onWithdraw, pendingBills }: Withdraw
             <div className="rounded-xl bg-amber-500/20 p-4 mb-4 border border-amber-500/30">
               <p className="text-sm text-amber-300 flex items-start gap-2">
                 <span className="text-amber-400 mt-0.5">⚠️</span>
-                <span>You have <strong className="text-white">{pendingBills.length}</strong> unpaid bill(s). Please pay them before requesting a withdrawal.</span>
+                <span>You have <strong className="text-white">{pendingBills.length}</strong> unpaid bill(s). Please clear these bills before requesting for a withdrawal</span>
               </p>
             </div>
 
@@ -281,15 +389,22 @@ const WithdrawalModal = ({ isOpen, onClose, onWithdraw, pendingBills }: Withdraw
             </Link>
           </>
         ) : (
-          <>
-            <div className="rounded-xl bg-emerald-500/20 p-4 mb-4 border border-emerald-500/30">
-              <p className="text-sm text-emerald-300 flex items-start gap-2">
-                <CheckCircle size={18} className="text-emerald-400" />
-                <span>All bills are paid! You can now proceed with your withdrawal.</span>
+          <> 
+            <div className="rounded-xl bg-amber-500/20 p-4 mb-4 border border-amber-500/30">
+              <p className="text-sm text-center text-amber-300 flex items-start gap-2">
+                <span>Enter your withdrawal details and click withdraw to confirm </span>
               </p>
             </div>
 
             <div className="space-y-4">
+              {/* ✅ Display Amount (from user input) */}
+              <div>
+                <label className="text-sm font-medium text-slate-300 block mb-1">Amount</label>
+                <div className="rounded-lg border border-slate-700 bg-slate-800/50 px-4 py-3 text-white select-none">
+                  <span className="text-lg font-bold text-amber-400">${formattedAmount}</span>
+                </div>
+              </div>
+
               <div>
                 <label className="text-sm font-medium text-slate-300 block mb-1">Payment Method</label>
                 <div className="flex gap-2">
@@ -320,37 +435,74 @@ const WithdrawalModal = ({ isOpen, onClose, onWithdraw, pendingBills }: Withdraw
 
               {paymentMethod === "bank" ? (
                 <>
-                  <div>
-                    <label className="text-sm font-medium text-slate-300 block mb-1">Bank Name</label>
-                    <div className="rounded-lg border border-slate-700 bg-slate-800/50 px-4 py-3 text-white select-none">
-                      {adminWithdrawalDetails.bank.bankName}
+                  {/* ✅ Account Selector Dropdown */}
+                  {userWithdrawalDetails?.accounts && userWithdrawalDetails.accounts.length > 0 ? (
+                    <div>
+                      <label className="text-sm font-medium text-slate-300 block mb-1">Select Account</label>
+                      <select
+                        value={selectedAccountId}
+                        onChange={(e) => setSelectedAccountId(e.target.value)}
+                        className="w-full rounded-lg border border-slate-700 bg-slate-800/50 px-4 py-3 text-white focus:border-cyan-500 focus:outline-none"
+                      >
+                        {userWithdrawalDetails.accounts.map((acc: any) => (
+                          <option key={acc.id} value={acc.id} className="bg-slate-800">
+                            {acc.bankName} - {acc.accountNumber} {acc.isDefault ? '(Default)' : ''}
+                          </option>
+                        ))}
+                      </select>
                     </div>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-slate-300 block mb-1">Account Name</label>
-                    <div className="rounded-lg border border-slate-700 bg-slate-800/50 px-4 py-3 text-white select-none">
-                      {adminWithdrawalDetails.bank.accountName}
+                  ) : (
+                    // Fallback if no accounts are set up
+                    <div className="rounded-lg bg-amber-500/20 p-3 border border-amber-500/30">
+                      <p className="text-sm text-amber-300">No bank accounts set up. Please go to Settings to add your bank details.</p>
                     </div>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-slate-300 block mb-1">Account Number</label>
-                    <div className="rounded-lg border border-slate-700 bg-slate-800/50 px-4 py-3 text-white select-none">
-                      {adminWithdrawalDetails.bank.accountNumber}
-                    </div>
-                  </div>
+                  )}
+
+                  {/* ✅ Display selected account details */}
+                  {selectedAccount && (
+                    <>
+                      <div>
+                        <label className="text-sm font-medium text-slate-300 block mb-1">Bank Name</label>
+                        <div className="rounded-lg border border-slate-700 bg-slate-800/50 px-4 py-3 text-white select-none">
+                          {selectedAccount.bankName || bankDetails.bankName}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-slate-300 block mb-1">Account Name</label>
+                        <div className="rounded-lg border border-slate-700 bg-slate-800/50 px-4 py-3 text-white select-none">
+                          {selectedAccount.accountName || bankDetails.accountName}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-slate-300 block mb-1">Account Number</label>
+                        <div className="rounded-lg border border-slate-700 bg-slate-800/50 px-4 py-3 text-white select-none">
+                          {selectedAccount.accountNumber || bankDetails.accountNumber}
+                        </div>
+                      </div>
+                      {selectedAccount.swiftCode && selectedAccount.swiftCode !== "Not Set" && (
+                        <div>
+                          <label className="text-sm font-medium text-slate-300 block mb-1">SWIFT Code</label>
+                          <div className="rounded-lg border border-slate-700 bg-slate-800/50 px-4 py-3 text-white select-none">
+                            {selectedAccount.swiftCode}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </>
               ) : (
+                // ✅ Crypto Section (unchanged)
                 <>
                   <div>
                     <label className="text-sm font-medium text-slate-300 block mb-1">Wallet Address</label>
                     <div className="rounded-lg border border-slate-700 bg-slate-800/50 px-4 py-3 text-white select-none break-all">
-                      {adminWithdrawalDetails.crypto.walletAddress}
+                      {bankDetails.walletAddress}
                     </div>
                   </div>
                   <div>
                     <label className="text-sm font-medium text-slate-300 block mb-1">Network</label>
                     <div className="rounded-lg border border-slate-700 bg-slate-800/50 px-4 py-3 text-white select-none">
-                      {adminWithdrawalDetails.crypto.network}
+                      {bankDetails.network}
                     </div>
                   </div>
                 </>
@@ -375,7 +527,7 @@ const WithdrawalModal = ({ isOpen, onClose, onWithdraw, pendingBills }: Withdraw
 };
 
 // ============================================================================
-// LOADING SKELETON (your custom skeleton)
+// LOADING SKELETON
 // ============================================================================
 
 const LoadingSkeleton = () => (
@@ -398,19 +550,13 @@ const Dash = lazy(() => import("@/app/components/Dash"));
 // MAIN CARDS PAGE
 // ============================================================================
 
-const generateRandomCardNumber = (): string => {
-  let num = '';
-  for (let i = 0; i < 16; i++) {
-    num += Math.floor(Math.random() * 10).toString();
-  }
-  return num;
-};
-
 export default function CardsPage() {
   const primaryCard = cards[0];
 
+  // ✅ Hydration fix: Only generate card number on client
+  const [isMounted, setIsMounted] = useState(false);
   const [isNumberVisible, setIsNumberVisible] = useState(true);
-  const [displayNumber, setDisplayNumber] = useState(generateRandomCardNumber());
+  const [displayNumber, setDisplayNumber] = useState("");
 
   const [withdrawalMethod, setWithdrawalMethod] = useState<"bank" | "crypto">("bank");
   const [bankName, setBankName] = useState("");
@@ -419,18 +565,131 @@ export default function CardsPage() {
   const [walletAddress, setWalletAddress] = useState("");
   const [network, setNetwork] = useState("");
   const [withdrawalAmount, setWithdrawalAmount] = useState("");
+  const [displayAmount, setDisplayAmount] = useState("");
 
   const [showWithdrawalModal, setShowWithdrawalModal] = useState(false);
   const [pendingBills, setPendingBills] = useState<Bill[]>([]);
   const [loadingBills, setLoadingBills] = useState(true);
 
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [receiptData, setReceiptData] = useState<any>(null);
+  const [userData, setUserData] = useState<{ 
+    username: string; 
+    email: string; 
+    displayName?: string 
+  }>({ 
+    username: '', 
+    email: '' 
+  });
+  const [isSavingWithdrawal, setIsSavingWithdrawal] = useState(false);
+  const [userWithdrawalDetails, setUserWithdrawalDetails] = useState<any>(null);
+
+  // ✅ Hydration fix: Generate card number only on client
   useEffect(() => {
+    setIsMounted(true);
+    setDisplayNumber(generateRandomCardNumber());
+  }, []);
+
+  // ✅ Card number rotation with secure random (client only)
+  useEffect(() => {
+    if (!isMounted) return;
+    
     const interval = setInterval(() => {
       setDisplayNumber(generateRandomCardNumber());
     }, 20000);
     return () => clearInterval(interval);
+  }, [isMounted]);
+
+  // ✅ NEW: Fetch user data for receipt
+  useEffect(() => {
+    const userData = localStorage.getItem('user');
+    if (userData) {
+      try {
+        const parsed = JSON.parse(userData);
+        setUserData({
+          username: parsed.username || parsed.displayName || 'User',
+          email: parsed.email || '',
+          displayName: parsed.displayName || parsed.username
+        });
+      } catch (e) {
+        console.error('Error parsing user data:', e);
+      }
+    }
   }, []);
 
+  // ✅ NEW: Fetch user's saved withdrawal details from database
+  const fetchWithdrawalDetails = async () => {
+    try {
+      const token = localStorage.getItem('auth_token');
+      console.log('🔵 [fetchWithdrawalDetails] Fetching withdrawal details...');
+      
+      const response = await fetch('/api/user/withdrawal', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      console.log('🔵 [fetchWithdrawalDetails] Response status:', response.status);
+      
+      if (response.ok) {
+        const result = await response.json();
+        console.log('🔵 [fetchWithdrawalDetails] Result:', result);
+        
+        if (result.success && result.data?.details) {
+          setUserWithdrawalDetails(result.data.details);
+          console.log('✅ [fetchWithdrawalDetails] Details loaded:', result.data.details);
+        } else {
+          console.log('⚠️ [fetchWithdrawalDetails] No details found');
+          setUserWithdrawalDetails(null);
+        }
+      } else {
+        console.error('❌ [fetchWithdrawalDetails] Failed to fetch:', response.status);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching withdrawal details:', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchWithdrawalDetails();
+  }, []);
+
+  // ✅ NEW: Auto-fill the input fields when withdrawal details are loaded
+  useEffect(() => {
+    if (userWithdrawalDetails) {
+      // Auto-fill Bank Name
+      if (userWithdrawalDetails.bankName && userWithdrawalDetails.bankName !== "Not Set") {
+        setBankName(userWithdrawalDetails.bankName);
+      }
+      
+      // Auto-fill Account Name
+      if (userWithdrawalDetails.accountName && userWithdrawalDetails.accountName !== "Not Set") {
+        setAccountName(userWithdrawalDetails.accountName);
+      }
+      
+      // Auto-fill Account Number (use the first account or default)
+      if (userWithdrawalDetails.accounts && userWithdrawalDetails.accounts.length > 0) {
+        const defaultAcc = userWithdrawalDetails.accounts.find((a: any) => a.isDefault) || userWithdrawalDetails.accounts[0];
+        if (defaultAcc) {
+          setAccountNumber(defaultAcc.accountNumber);
+        }
+      } else if (userWithdrawalDetails.accountNumber && userWithdrawalDetails.accountNumber !== "Not Set") {
+        setAccountNumber(userWithdrawalDetails.accountNumber);
+      }
+
+      // ✅ Auto-fill Crypto Wallet Address
+      if (userWithdrawalDetails.walletAddress && userWithdrawalDetails.walletAddress !== "Not Set") {
+        setWalletAddress(userWithdrawalDetails.walletAddress);
+      }
+
+      // ✅ Auto-fill Crypto Network
+      if (userWithdrawalDetails.network && userWithdrawalDetails.network !== "Not Set") {
+        setNetwork(userWithdrawalDetails.network);
+      }
+    }
+  }, [userWithdrawalDetails]);
+
+  // ✅ Fetch dashboard data
   useEffect(() => {
     const fetchDashboard = async () => {
       try {
@@ -458,7 +717,7 @@ export default function CardsPage() {
           setPendingBills(pending);
         }
       } catch (error) {
-        console.error("Error fetching dashboard:", error);
+        console.error("Error fetching data:", error);
       } finally {
         setLoadingBills(false);
       }
@@ -466,19 +725,100 @@ export default function CardsPage() {
     fetchDashboard();
   }, []);
 
-  const handleWithdraw = (data: any) => {
-    const withdrawalData = {
-      ...data,
-      amount: withdrawalAmount,
-      bankName,
-      accountName,
-      accountNumber,
-      walletAddress,
-      network,
-    };
-    console.log("Withdrawal request:", withdrawalData);
-    setShowWithdrawalModal(false);
-    alert("Withdrawal request submitted! Check your email for confirmation.");
+  // ✅ Handle amount change with formatting
+  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value.replace(/,/g, '');
+    const num = parseFloat(raw);
+    if (!isNaN(num)) {
+      setWithdrawalAmount(raw);
+      setDisplayAmount(formatCurrency(raw));
+    } else if (raw === '' || raw === '-') {
+      setWithdrawalAmount('');
+      setDisplayAmount('');
+    }
+  };
+
+  const handleAmountBlur = () => {
+    if (withdrawalAmount) {
+      setDisplayAmount(formatCurrency(withdrawalAmount));
+    }
+  };
+
+  const handleAmountFocus = () => {
+    setDisplayAmount(withdrawalAmount);
+  };
+
+  // ✅ Updated handleWithdraw with secure ID generation and better logging
+  const handleWithdraw = async (data: any) => {
+    try {
+      setIsSavingWithdrawal(true);
+
+      const token = localStorage.getItem('auth_token');
+      // console.log('🔵 [Withdraw] Starting withdrawal process...');
+      // console.log('🔵 [Withdraw] Method:', withdrawalMethod);
+      // console.log('🔵 [Withdraw] Amount:', withdrawalAmount);
+
+      const withdrawalPayload = {
+        method: withdrawalMethod,
+        amount: parseFloat(withdrawalAmount),
+        bankName: bankName,
+        accountName: accountName,
+        accountNumber: accountNumber,
+        walletAddress: walletAddress,
+        network: network,
+      };
+
+      console.log('🔵 [Withdraw] Payload:', withdrawalPayload);
+
+      const response = await fetch('/api/user/withdrawal', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(withdrawalPayload)
+      });
+
+      console.log('🔵 [Withdraw] Response status:', response.status);
+
+      const result = await response.json();
+      console.log('🔵 [Withdraw] Response data:', result);
+
+      if (!response.ok) {
+        console.error('❌ Failed to save withdrawal:', result);
+        alert(result.error || 'Failed to process withdrawal. Please try again.');
+        return;
+      }
+
+      // ✅ Use the secure reference from the API
+      setReceiptData({
+        reference: result.data.history.reference,
+        amount: parseFloat(withdrawalAmount),
+        method: withdrawalMethod,
+        bankName: bankName,
+        accountName: accountName,
+        accountNumber: accountNumber,
+        walletAddress: walletAddress,
+        network: network,
+        status: 'pending',
+        createdAt: new Date().toISOString()
+      });
+
+      setShowWithdrawalModal(false);
+      setShowReceiptModal(true);
+      setWithdrawalAmount('');
+      setDisplayAmount('');
+
+      // ✅ Refresh withdrawal details after saving
+      await fetchWithdrawalDetails();
+      console.log('✅ [Withdraw] Withdrawal completed successfully!');
+
+    } catch (error) {
+      console.error('❌ Withdrawal error:', error);
+      alert('An error occurred. Please try again.');
+    } finally {
+      setIsSavingWithdrawal(false);
+    }
   };
 
   const isWithdrawDisabled = () => {
@@ -518,13 +858,13 @@ export default function CardsPage() {
           </div>
         </motion.div>
 
-        {/* Main Grid – Responsive */}
+        {/* Main Grid */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          {/* Left Column – Card Display + Pending Bills */}
+          {/* Left Column */}
           <div className="space-y-6">
             <CardDisplay
               card={primaryCard}
-              displayNumber={displayNumber}
+              displayNumber={isMounted ? displayNumber : "•••• •••• •••• ••••"}
               isNumberVisible={isNumberVisible}
               onToggleVisibility={() => setIsNumberVisible(!isNumberVisible)}
               index={1}
@@ -584,9 +924,9 @@ export default function CardsPage() {
                               Due: {bill.dueDate ? new Date(bill.dueDate).toLocaleDateString() : "N/A"}
                             </span>
                             <span className="text-cyan-700/40">•</span>
-                            <span className={`font-medium ${
+                            <span className={`font-medium ${(
                               getDueInText(bill.dueDate) === "..Overdue" ? "text-red-600" : "text-amber-600"
-                            }`}>
+                            )}`}>
                               {getDueInText(bill.dueDate)}
                             </span>
                           </div>
@@ -613,7 +953,7 @@ export default function CardsPage() {
             </motion.div>
           </div>
 
-          {/* Right Column – Withdrawal + Quick Stats */}
+          {/* Right Column */}
           <div className="space-y-6">
             {/* Withdrawal Section */}
             <motion.div
@@ -632,27 +972,28 @@ export default function CardsPage() {
                   <div className="flex gap-2">
                     <button
                       onClick={() => setWithdrawalMethod("bank")}
-                      className={`flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-all ${
+                      className={`flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-all ${(
                         withdrawalMethod === "bank"
                           ? "bg-none text-cyan-900 ring-1 ring-cyan-500/50 shadow-xl"
                           : "bg-none text-cyan-700 hover:bg-none"
-                      }`}
+                      )}`}
                     >
                       <Banknote size={14} className="inline mr-1" /> Bank
                     </button>
                     <button
                       onClick={() => setWithdrawalMethod("crypto")}
-                      className={`flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-all ${
+                      className={`flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-all ${(
                         withdrawalMethod === "crypto"
                           ? "bg-none text-cyan-900 ring-1 ring-cyan-500/50 shadow-xl"
                           : "bg-none text-cyan-700 hover:bg-none"
-                      }`}
+                      )}`}
                     >
                       <Wallet size={14} className="inline mr-1" /> Crypto
                     </button>
                   </div>
                 </div>
 
+                {/* Formatted Amount Input */}
                 <div>
                   <label className="block text-xs font-medium text-cyan-700/70 mb-1">
                     Amount <span className="text-red-500">*</span>
@@ -660,12 +1001,12 @@ export default function CardsPage() {
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-cyan-700/60">$</span>
                     <input
-                      type="number"
-                      value={withdrawalAmount}
-                      onChange={(e) => setWithdrawalAmount(e.target.value)}
+                      type="text"
+                      value={displayAmount || withdrawalAmount}
+                      onChange={handleAmountChange}
+                      onBlur={handleAmountBlur}
+                      onFocus={handleAmountFocus}
                       placeholder="0.00"
-                      min="0.01"
-                      step="0.01"
                       className="w-full rounded-lg border border-cyan-200/50 shadow-xl bg-none pl-8 pr-3 py-2 text-sm text-cyan-900
                        placeholder:text-cyan-700/40 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                     />
@@ -712,6 +1053,7 @@ export default function CardsPage() {
                   <>
                     <div>
                       <label className="block text-xs font-medium text-cyan-700/70 mb-1">Wallet Address</label>
+                      {/* ✅ Wallet Address input - now auto-filled */}
                       <input
                         type="text"
                         value={walletAddress}
@@ -722,19 +1064,20 @@ export default function CardsPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-cyan-700/70 mb-1">Network</label>
+                      <label className="block text-xs font-medium text-cyan-900 mb-1">Network</label>
+                      {/* ✅ Network select - now auto-filled */}
                       <select
                         value={network}
                         onChange={(e) => setNetwork(e.target.value)}
-                        className="w-full rounded-lg border border-cyan-200/50  shadow-xl bg-none px-3 py-2 text-sm 
+                        className="w-full rounded-xl border border-none  shadow-xl bg-none px-3 py-2 text-sm 
                         text-cyan-900 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                       >
-                        <option value="">Select Network</option>
-                        <option value="ethereum">Ethereum (ERC-20)</option>
-                        <option value="bsc">Binance Smart Chain (BEP-20)</option>
-                        <option value="solana">Solana</option>
-                        <option value="bitcoin">Bitcoin</option>
-                        <option value="polygon">Polygon</option>
+                        <option value="" className="text-cyan-900">Select Network</option>
+                        <option value="ethereum" className="text-cyan-900">Ethereum (ERC-20)</option>
+                        <option value="bsc" className="text-cyan-900">Binance Smart Chain (BEP-20)</option>
+                        <option value="solana" className="text-cyan-900">Solana</option>
+                        <option value="bitcoin" className="text-cyan-900">Bitcoin</option>
+                        <option value="polygon" className="text-cyan-900">Polygon</option>
                       </select>
                     </div>
                   </>
@@ -745,11 +1088,11 @@ export default function CardsPage() {
                   whileTap={{ scale: 0.98 }}
                   onClick={() => setShowWithdrawalModal(true)}
                   disabled={isWithdrawDisabled()}
-                  className={`w-full rounded-xl py-2.5 font-bold text-white shadow-xl transition-all text-sm ${
+                  className={`w-full rounded-xl py-2.5 font-bold text-white shadow-xl transition-all text-sm ${(
                     isWithdrawDisabled()
                       ? "bg-gray-400 cursor-not-allowed shadow-none"
                       : "bg-gradient-to-r from-amber-500 to-orange-600 shadow-amber-500/30 hover:from-amber-400 hover:to-orange-500"
-                  }`}
+                  )}`}
                 >
                   <span className="flex items-center justify-center gap-2">
                     <ArrowRight size={16} /> Withdraw
@@ -769,9 +1112,9 @@ export default function CardsPage() {
             >
               <div className="flex items-center gap-3">
                 <div className="rounded-full bg-emerald-500/20 p-1.5">
-                  <CheckCircle size={14} className="text-emerald-600" />
+                  <CheckCircle size={14} className="font-light text-emerald-600" />
                 </div>
-                <span className="text-sm text-cyan-800">All cards are active</span>
+                <span className="text-sm text-cyan-800">this card is active</span>
               </div>
               <ChevronRight size={18} className="text-cyan-700/40" />
             </motion.div>
@@ -787,6 +1130,17 @@ export default function CardsPage() {
             onClose={() => setShowWithdrawalModal(false)}
             onWithdraw={handleWithdraw}
             pendingBills={pendingBills}
+            userWithdrawalDetails={userWithdrawalDetails}
+            withdrawalAmount={withdrawalAmount}
+          />
+        )}
+
+        {showReceiptModal && receiptData && (
+          <WithdrawalReceiptModal
+            isOpen={showReceiptModal}
+            onClose={() => setShowReceiptModal(false)}
+            withdrawalData={receiptData}
+            userData={userData}
           />
         )}
       </AnimatePresence>
