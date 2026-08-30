@@ -114,7 +114,7 @@ export const metadata: Metadata = {
     siteName: "AshTrust Bank",
     images: [
       {
-        url: "https://just-deploy-rho.vercel.app.png", // ✅ Replace with actual URL
+        url: "https://just-deploy-rho.vercel.app/preview.png", // ✅ Replace with actual URL
         width: 1200,
         height: 630,
         alt: "AshTrust Bank Preview",
@@ -126,7 +126,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: 'AshTrust Bank',
     description: 'Modern Banking. Timeless Trust.',
-    images: ["https://just-deploy-rho.vercel.app/og-image.png"], // ✅ Replace with actual URL
+    images: ["https://just-deploy-rho.vercel.app/loadLogo_shield_smooth.png"], // ✅ Replace with actual URL
   },
 };
 
