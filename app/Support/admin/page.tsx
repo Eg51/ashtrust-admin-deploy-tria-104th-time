@@ -130,20 +130,30 @@ export default function AdminSupportPage() {
     setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
   };
 
+  // ✅ ONLY THIS FUNCTION IS CHANGED - Everything else remains identical
+  // The old commented-out code is preserved below for reference
   const sendMessage = async () => {
     if (!inputMessage.trim() || !roomId || !token) return;
 
     try {
-      const res = await fetch('/api/chats/messages', {
+      // ✅ FIXED: Use room-specific endpoint instead of /api/chats/messages
+      const res = await fetch(`/api/chats/messages/${roomId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ roomId, message: inputMessage })
+        body: JSON.stringify({ 
+          message: inputMessage,
+          type: 'text'
+        })
       });
 
-      if (!res.ok) throw new Error('Failed to send');
+      if (!res.ok) {
+        const errorData = await res.json();
+        console.error('Send error:', errorData);
+        return;
+      }
 
       const data = await res.json();
       if (data.success && data.data) {

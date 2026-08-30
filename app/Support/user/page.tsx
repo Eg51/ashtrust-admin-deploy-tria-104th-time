@@ -113,19 +113,24 @@ export default function UserSupportPage() {
     setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
   };
 
+  // ✅ ONLY THIS FUNCTION IS CHANGED - Everything else remains identical
   const sendMessage = async () => {
     if (!inputMessage.trim() || !roomId || !token) return;
 
     try {
       console.log('🔵 [Frontend] Sending message:', inputMessage);
       
-      const res = await fetch('/api/chats/messages', {
+      // ✅ FIXED: Use room-specific endpoint instead of /api/chats/messages
+      const res = await fetch(`/api/chats/messages/${roomId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ roomId, message: inputMessage })
+        body: JSON.stringify({ 
+          message: inputMessage,
+          type: 'text'
+        })
       });
 
       if (!res.ok) throw new Error('Failed to send');
@@ -144,7 +149,7 @@ export default function UserSupportPage() {
       console.error('🔴 [Frontend] Send error:', error);
     }
   };
-
+  
   if (currentUserId === null || token === null || !roomId) {
     return <div className="min-h-screen bg-gradient-to-br from-blue-200 via-cyan-100 to-gray-300 p-4 sm:p-6 lg:p-8">
         <div className="mx-auto max-w-6xl space-y-4">

@@ -350,13 +350,15 @@ export default function ChatWidget({
   };
 
   // ✅ FIXED: Enhanced send message with unread clearing
+ 
+  // ✅ FIXED: Enhanced send message with correct endpoint
   const handleSendMessage = async () => {
     if (!inputMessage.trim() || !currentRoomId || sendingMessage) return;
-
+  
     const user = JSON.parse(localStorage.getItem('user') || '{}');
     const token = localStorage.getItem('auth_token');
     const guestIdFromStorage = localStorage.getItem('guest_id');
-
+  
     const tempId = `temp-${Date.now()}`;
     setMessages(prev => [...prev, {
       id: tempId,
@@ -368,14 +370,15 @@ export default function ChatWidget({
     setInputMessage("");
     setSendingMessage(true);
     setPendingReply(true);
-
+  
     // ✅ Clear unread count when sending a message
     setUnreadCount(0);
     if (guestIdFromStorage) {
       localStorage.setItem(`guest_unread_${guestIdFromStorage}`, '0');
     }
-
+  
     try {
+      // ✅ FIXED: Use the room-specific endpoint
       const res = await fetch(`/api/chats/messages/${currentRoomId}`, {
         method: 'POST',
         headers: { 
@@ -388,36 +391,139 @@ export default function ChatWidget({
           type: 'text'
         })
       });
-
+  
       if (res.ok) {
         const data = await res.json();
-        setMessages(prev => prev.map(msg => msg.id === tempId ? data.data : msg));
+        if (data.success) {
+          setMessages(prev => prev.map(msg => msg.id === tempId ? data.data : msg));
+        }
+      } else {
+        // ✅ Handle error response
+        const errorData = await res.json();
+        console.error('Send error:', errorData);
+        // Remove the temporary message on error
+        setMessages(prev => prev.filter(msg => msg.id !== tempId));
       }
     } catch (error) {
       console.error("Error sending message:", error);
+      // Remove the temporary message on error
+      setMessages(prev => prev.filter(msg => msg.id !== tempId));
     } finally {
       setSendingMessage(false);
     }
   };
+  // const handleSendMessage = async () => {
+  //   if (!inputMessage.trim() || !currentRoomId || sendingMessage) return;
+
+  //   const user = JSON.parse(localStorage.getItem('user') || '{}');
+  //   const token = localStorage.getItem('auth_token');
+  //   const guestIdFromStorage = localStorage.getItem('guest_id');
+
+  //   const tempId = `temp-${Date.now()}`;
+  //   setMessages(prev => [...prev, {
+  //     id: tempId,
+  //     senderId: user._id || guestIdFromStorage || 'guest',
+  //     message: inputMessage,
+  //     type: 'text',
+  //     timestamp: new Date().toISOString()
+  //   }]);
+  //   setInputMessage("");
+  //   setSendingMessage(true);
+  //   setPendingReply(true);
+
+  //   // ✅ Clear unread count when sending a message
+  //   setUnreadCount(0);
+  //   if (guestIdFromStorage) {
+  //     localStorage.setItem(`guest_unread_${guestIdFromStorage}`, '0');
+  //   }
+
+  //   try {
+  //     const res = await fetch(`/api/chats/messages/${currentRoomId}`, {
+  //       method: 'POST',
+  //       headers: { 
+  //         'Content-Type': 'application/json', 
+  //         'Authorization': token ? `Bearer ${token}` : '',
+  //         'X-Guest-ID': guestIdFromStorage || ''
+  //       },
+  //       body: JSON.stringify({
+  //         message: inputMessage,
+  //         type: 'text'
+  //       })
+  //     });
+
+  //     if (res.ok) {
+  //       const data = await res.json();
+  //       setMessages(prev => prev.map(msg => msg.id === tempId ? data.data : msg));
+  //     }
+  //   } catch (error) {
+  //     console.error("Error sending message:", error);
+  //   } finally {
+  //     setSendingMessage(false);
+  //   }
+  // };
+
+  // const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  //   const file = e.target.files?.[0];
+  //   if (!file || !currentRoomId) return;
+
+  //   const token = localStorage.getItem('auth_token');
+  //   const guestIdFromStorage = localStorage.getItem('guest_id');
+  //   setSendingMessage(true);
+  //   setPendingReply(true);
+
+  //   // ✅ Clear unread count when uploading image
+  //   setUnreadCount(0);
+  //   if (guestIdFromStorage) {
+  //     localStorage.setItem(`guest_unread_${guestIdFromStorage}`, '0');
+  //   }
+
+  //   try {
+  //     const compressedImage = await compressImage(file, 100, 400);
+
+  //     const res = await fetch(`/api/chats/messages/${currentRoomId}`, {
+  //       method: 'POST',
+  //       headers: { 
+  //         'Content-Type': 'application/json', 
+  //         'Authorization': token ? `Bearer ${token}` : '',
+  //         'X-Guest-ID': guestIdFromStorage || ''
+  //       },
+  //       body: JSON.stringify({
+  //         type: 'image',
+  //         attachmentUrl: compressedImage
+  //       })
+  //     });
+
+  //     if (res.ok) {
+  //       const data = await res.json();
+  //       setMessages(prev => [...prev, data.data]);
+  //     }
+  //   } catch (error) {
+  //     console.error("Error uploading image:", error);
+  //   } finally {
+  //     setSendingMessage(false);
+  //     if (fileInputRef.current) fileInputRef.current.value = "";
+  //   }
+  // };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !currentRoomId) return;
-
+  
     const token = localStorage.getItem('auth_token');
     const guestIdFromStorage = localStorage.getItem('guest_id');
     setSendingMessage(true);
     setPendingReply(true);
-
+  
     // ✅ Clear unread count when uploading image
     setUnreadCount(0);
     if (guestIdFromStorage) {
       localStorage.setItem(`guest_unread_${guestIdFromStorage}`, '0');
     }
-
+  
     try {
       const compressedImage = await compressImage(file, 100, 400);
-
+  
+      // ✅ FIXED: Use the room-specific endpoint
       const res = await fetch(`/api/chats/messages/${currentRoomId}`, {
         method: 'POST',
         headers: { 
@@ -430,10 +536,12 @@ export default function ChatWidget({
           attachmentUrl: compressedImage
         })
       });
-
+  
       if (res.ok) {
         const data = await res.json();
-        setMessages(prev => [...prev, data.data]);
+        if (data.success) {
+          setMessages(prev => [...prev, data.data]);
+        }
       }
     } catch (error) {
       console.error("Error uploading image:", error);
