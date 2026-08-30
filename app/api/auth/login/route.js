@@ -80,9 +80,10 @@ export async function POST(request) {
     // Save session (optional - don't wait)
     let sessionId = null;
     try {
-      sessionId = await saveSession({
+        sessionId = await saveSession({
         userId: user._id.toString(),
         username: user.username,
+        email: user.email, // ✅ THIS LINE WAS MISSING
         firstName: user.firstName,
         lastName: user.lastName,
         displayName: user.displayName || user.username,
@@ -116,7 +117,7 @@ export async function POST(request) {
         secure: isSecure,
         sameSite: 'lax',
         path: '/',
-        maxAge: 3600,
+        maxAge: 1800,
       });
     }
 

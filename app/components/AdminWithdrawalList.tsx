@@ -128,7 +128,7 @@ export default function AdminWithdrawalList() {
 
   return (
     <div className="bg-[#C4F8FD] rounded-2xl shadow-xl p-3 sm:p-4 md:p-6">
-      {/* Header */}
+   
       <div className="flex flex-col xs:flex-row items-start xs:items-center justify-between gap-3 xs:gap-0 mb-4 sm:mb-6">
         <div className="flex items-center gap-2 sm:gap-3">
           <div className="p-1.5 sm:p-2 bg-cyan-100 rounded-lg">

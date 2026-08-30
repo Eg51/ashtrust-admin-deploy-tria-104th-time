@@ -89,7 +89,7 @@ export default function ChangePassword() {
 
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Current Password */}
-        <div className="relative">
+        <div>
           <label className="text-xs font-bold text-cyan-700 block mb-1">Current Password</label>
           <div className="relative">
             <input
@@ -97,21 +97,22 @@ export default function ChangePassword() {
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
               required
-              className="w-full rounded-lg bg-none px-4 py-2.5 pr-10 text-sm font-bold text-cyan-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 border-none shadow-inner"
+              className="w-full rounded-lg bg-white/50 px-4 py-2.5 pr-12 text-sm font-bold text-cyan-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 border-none shadow-inner"
               placeholder="Enter current password"
             />
             <button
               type="button"
               onClick={() => setShowCurrent(!showCurrent)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-cyan-600"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-cyan-600 hover:text-cyan-800 transition-colors z-10"
+              aria-label={showCurrent ? "Hide password" : "Show password"}
             >
-              {showCurrent ? <EyeOff size={16} /> : <Eye size={16} />}
+              {showCurrent ? <EyeOff size={20} /> : <Eye size={20} />}
             </button>
           </div>
         </div>
 
         {/* New Password */}
-        <div className="relative">
+        <div>
           <label className="text-xs font-bold text-cyan-700 block mb-1">New Password</label>
           <div className="relative">
             <input
@@ -119,21 +120,22 @@ export default function ChangePassword() {
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               required
-              className="w-full rounded-lg bg-white/50 px-4 py-2.5 pr-10 text-sm font-bold text-cyan-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 border-none shadow-inner"
+              className="w-full rounded-lg bg-white/50 px-4 py-2.5 pr-12 text-sm font-bold text-cyan-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 border-none shadow-inner"
               placeholder="Enter new password (8+ chars)"
             />
             <button
               type="button"
               onClick={() => setShowNew(!showNew)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-cyan-600"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-cyan-600 hover:text-cyan-800 transition-colors z-10"
+              aria-label={showNew ? "Hide password" : "Show password"}
             >
-              {showNew ? <EyeOff size={16} /> : <Eye size={16} />}
+              {showNew ? <EyeOff size={20} /> : <Eye size={20} />}
             </button>
           </div>
         </div>
 
         {/* Confirm New Password */}
-        <div className="relative">
+        <div>
           <label className="text-xs font-bold text-cyan-700 block mb-1">Confirm New Password</label>
           <div className="relative">
             <input
@@ -141,15 +143,16 @@ export default function ChangePassword() {
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
-              className="w-full rounded-lg bg-none px-4 py-2.5 pr-10 text-sm font-bold text-cyan-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 border-none shadow-inner"
+              className="w-full rounded-lg bg-white/50 px-4 py-2.5 pr-12 text-sm font-bold text-cyan-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 border-none shadow-inner"
               placeholder="Confirm new password"
             />
             <button
               type="button"
               onClick={() => setShowConfirm(!showConfirm)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-cyan-600"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-cyan-600 hover:text-cyan-800 transition-colors z-10"
+              aria-label={showConfirm ? "Hide password" : "Show password"}
             >
-              {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
+              {showConfirm ? <EyeOff className="text-cyan-900" size={20} /> : <Eye size={20} />}
             </button>
           </div>
         </div>
@@ -159,7 +162,7 @@ export default function ChangePassword() {
           whileTap={{ scale: 0.98 }}
           type="submit"
           disabled={isLoading}
-          className="w-full rounded-xl bg-g[#C4F8FD] shadow-xl py-3 text-sm font-bold text-white shadow-cyan-500/30 hover:from-cyan-400 hover:to-blue-500 transition-all disabled:opacity-50"
+          className="w-full rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 py-3 text-sm font-bold text-white shadow-xl shadow-cyan-500/30 hover:from-cyan-400 hover:to-blue-400 transition-all disabled:opacity-50"
         >
           {isLoading ? (
             <span className="flex items-center justify-center gap-2">

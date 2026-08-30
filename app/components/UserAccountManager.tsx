@@ -256,7 +256,7 @@ export default function UserAccountManager({ onSave }: UserAccountManagerProps) 
       setAccount1({ ...account1, isDefault: true });
     }
   };
-
+  
   if (loading) {
     return (
       <div className="flex justify-center items-center py-12 flex-col">
@@ -266,7 +266,7 @@ export default function UserAccountManager({ onSave }: UserAccountManagerProps) 
   }
 
   return (
-    <div className="bg-[#C4F8FD] rounded-2xl shadow-xl p-4 sm:p-6 max-w-2xl mx-auto">
+    <div className="bg-[#C4F8FD] rounded-2xl shadow-xl p-9 sm:p-6 max-w-2xl m-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">

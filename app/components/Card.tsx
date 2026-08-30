@@ -768,7 +768,7 @@ export default function CardsPage() {
         network: network,
       };
 
-      console.log('🔵 [Withdraw] Payload:', withdrawalPayload);
+      // console.log('🔵 [Withdraw] Payload:', withdrawalPayload);
 
       const response = await fetch('/api/user/withdrawal', {
         method: 'POST',
