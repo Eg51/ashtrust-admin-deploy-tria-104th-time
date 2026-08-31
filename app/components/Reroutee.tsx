@@ -39,10 +39,6 @@
 // }
 // components/RealTimePrices.tsx
 
-// components/RealTimePrices.tsx
-// components/RealTimePrices.tsx
-
-"use client";
 
 "use client";
 
@@ -211,77 +207,211 @@ export default function RealTimePrices() {
     };
   }, []);
 
-  const fetchPrices = async (isManualRefresh = false) => {
-    if (isManualRefresh) {
-      setIsRefreshing(true);
-    } else {
-      setIsLoading(true);
+
+  // In RealTimePrices.tsx - update the fetchPrices function
+
+// const fetchPrices = async (isManualRefresh = false) => {
+//   if (isManualRefresh) {
+//     setIsRefreshing(true);
+//   } else {
+//     setIsLoading(true);
+//   }
+//   setError(null);
+
+//   try {
+//     const ids = PRICE_SYMBOLS.map((p) => p.id).join(",");
+    
+//     // ✅ Log the request URL for debugging
+//     const url = `/api/prices?ids=${ids}&vs_currencies=usd&include_24hr_change=true&include_24hr_high=true&include_24hr_low=true&include_24hr_vol=true`;
+//     console.log('🔵 [RealTimePrices] Fetching:', url);
+    
+//     const response = await fetch(url);
+
+//     console.log('🔵 [RealTimePrices] Response status:', response.status);
+//     console.log('🔵 [RealTimePrices] Content-Type:', response.headers.get('content-type'));
+
+//     // ✅ Check if response is ok
+//     if (!response.ok) {
+//       const text = await response.text();
+//       console.error('🔴 [RealTimePrices] Error response:', text.substring(0, 200));
+//       throw new Error(`Server responded with ${response.status}`);
+//     }
+
+//     // ✅ Check if content-type is JSON
+//     const contentType = response.headers.get('content-type');
+//     if (!contentType || !contentType.includes('application/json')) {
+//       const text = await response.text();
+//       console.error('🔴 [RealTimePrices] Non-JSON response:', text.substring(0, 200));
+//       throw new Error('Server returned non-JSON response');
+//     }
+
+//     const data = await response.json();
+//     // ... rest of the code
+//   } catch (err) {
+//     console.error("Error fetching prices:", err);
+//     if (isMountedRef.current) {
+//       setError("Server not available at this time");
+//       // ... retry logic
+//     }
+//   }
+// };
+// ✅ COMPLETE fetchPrices function - REPLACE the broken one with this
+
+const fetchPrices = async (isManualRefresh = false) => {
+  if (isManualRefresh) {
+    setIsRefreshing(true);
+  } else {
+    setIsLoading(true);
+  }
+  setError(null);
+
+  try {
+    const ids = PRICE_SYMBOLS.map((p) => p.id).join(",");
+    
+    const url = `/api/prices?ids=${ids}&vs_currencies=usd&include_24hr_change=true&include_24hr_high=true&include_24hr_low=true&include_24hr_vol=true`;
+    console.log('🔵 [RealTimePrices] Fetching:', url);
+    
+    const response = await fetch(url);
+
+    console.log('🔵 [RealTimePrices] Response status:', response.status);
+    console.log('🔵 [RealTimePrices] Content-Type:', response.headers.get('content-type'));
+
+    if (!response.ok) {
+      const text = await response.text();
+      console.error('🔴 [RealTimePrices] Error response:', text.substring(0, 200));
+      throw new Error(`Server responded with ${response.status}`);
     }
-    setError(null);
 
-    try {
-      const ids = PRICE_SYMBOLS.map((p) => p.id).join(",");
-      const response = await fetch(
-        `/api/prices?ids=${ids}&vs_currencies=usd&include_24hr_change=true&include_24hr_high=true&include_24hr_low=true&include_24hr_vol=true`
-      );
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      const text = await response.text();
+      console.error('🔴 [RealTimePrices] Non-JSON response:', text.substring(0, 200));
+      throw new Error('Server returned non-JSON response');
+    }
 
-      // ✅ NEW: Check if content-type is JSON, if not, throw error
-      if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
-        throw new Error("Server not available at this time");
+    const data: PriceResponse = await response.json();
+
+    // ✅ THIS WAS MISSING - Map the data to price objects
+    const mappedPrices: PriceData[] = PRICE_SYMBOLS.map((item) => {
+      const priceData = data[item.id] || {};
+      const price = priceData.usd || 0;
+      const change24h = priceData.usd_24h_change || 0;
+
+      return {
+        symbol: item.symbol,
+        name: item.name,
+        price: price,
+        change24h: change24h,
+        high24h: priceData.usd_24h_high,
+        low24h: priceData.usd_24h_low,
+        volume: priceData.usd_24h_vol,
+        lastUpdated: new Date().toLocaleTimeString(),
+        icon: item.icon,
+        cardColor: item.cardColor,
+      };
+    });
+
+    if (isMountedRef.current) {
+      setPrices(mappedPrices);
+      setLastUpdated(new Date().toLocaleTimeString());
+      setError(null);
+      retryCountRef.current = 0;
+    }
+  } catch (err) {
+    console.error("Error fetching prices:", err);
+    if (isMountedRef.current) {
+      setError("Server not available at this time");
+
+      retryCountRef.current += 1;
+      const delay = Math.min(5000 * Math.pow(1.5, retryCountRef.current - 1), 30000);
+
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
       }
-
-      const data: PriceResponse = await response.json();
-
-      const mappedPrices: PriceData[] = PRICE_SYMBOLS.map((item) => {
-        const priceData = data[item.id] || {};
-        const price = priceData.usd || 0;
-        const change24h = priceData.usd_24h_change || 0;
-
-        return {
-          symbol: item.symbol,
-          name: item.name,
-          price: price,
-          change24h: change24h,
-          high24h: priceData.usd_24h_high,
-          low24h: priceData.usd_24h_low,
-          volume: priceData.usd_24h_vol,
-          lastUpdated: new Date().toLocaleTimeString(),
-          icon: item.icon,
-          cardColor: item.cardColor,
-        };
-      });
-
-      if (isMountedRef.current) {
-        setPrices(mappedPrices);
-        setLastUpdated(new Date().toLocaleTimeString());
-        setError(null);
-        retryCountRef.current = 0;
-      }
-    } catch (err) {
-      console.error("Error fetching prices:", err);
-      if (isMountedRef.current) {
-        // ✅ NEW: Set the specific error message
-        setError("Server not available at this time");
-
-        retryCountRef.current += 1;
-        const delay = Math.min(5000 * Math.pow(1.5, retryCountRef.current - 1), 30000);
-
-        if (retryTimeoutRef.current) {
-          clearTimeout(retryTimeoutRef.current);
+      retryTimeoutRef.current = setTimeout(() => {
+        if (isMountedRef.current) {
+          fetchPrices(false);
         }
-        retryTimeoutRef.current = setTimeout(() => {
-          if (isMountedRef.current) {
-            fetchPrices(false);
-          }
-        }, delay);
-      }
-    } finally {
-      if (isMountedRef.current) {
-        setIsLoading(false);
-        setIsRefreshing(false);
-      }
+      }, delay);
     }
-  };
+  } finally {
+    if (isMountedRef.current) {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  }
+};
+  // const fetchPrices = async (isManualRefresh = false) => {
+  //   if (isManualRefresh) {
+  //     setIsRefreshing(true);
+  //   } else {
+  //     setIsLoading(true);
+  //   }
+  //   setError(null);
+
+  //   try {
+  //     const ids = PRICE_SYMBOLS.map((p) => p.id).join(",");
+  //     const response = await fetch(
+  //       `/api/prices?ids=${ids}&vs_currencies=usd&include_24hr_change=true&include_24hr_high=true&include_24hr_low=true&include_24hr_vol=true`
+  //     );
+
+  //     // ✅ NEW: Check if content-type is JSON, if not, throw error
+  //     if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
+  //       throw new Error("Server not available at this time");
+  //     }
+
+  //     const data: PriceResponse = await response.json();
+
+  //     const mappedPrices: PriceData[] = PRICE_SYMBOLS.map((item) => {
+  //       const priceData = data[item.id] || {};
+  //       const price = priceData.usd || 0;
+  //       const change24h = priceData.usd_24h_change || 0;
+
+  //       return {
+  //         symbol: item.symbol,
+  //         name: item.name,
+  //         price: price,
+  //         change24h: change24h,
+  //         high24h: priceData.usd_24h_high,
+  //         low24h: priceData.usd_24h_low,
+  //         volume: priceData.usd_24h_vol,
+  //         lastUpdated: new Date().toLocaleTimeString(),
+  //         icon: item.icon,
+  //         cardColor: item.cardColor,
+  //       };
+  //     });
+
+  //     if (isMountedRef.current) {
+  //       setPrices(mappedPrices);
+  //       setLastUpdated(new Date().toLocaleTimeString());
+  //       setError(null);
+  //       retryCountRef.current = 0;
+  //     }
+  //   } catch (err) {
+  //     console.error("Error fetching prices:", err);
+  //     if (isMountedRef.current) {
+  //       // ✅ NEW: Set the specific error message
+  //       setError("Server not available at this time");
+
+  //       retryCountRef.current += 1;
+  //       const delay = Math.min(5000 * Math.pow(1.5, retryCountRef.current - 1), 30000);
+
+  //       if (retryTimeoutRef.current) {
+  //         clearTimeout(retryTimeoutRef.current);
+  //       }
+  //       retryTimeoutRef.current = setTimeout(() => {
+  //         if (isMountedRef.current) {
+  //           fetchPrices(false);
+  //         }
+  //       }, delay);
+  //     }
+  //   } finally {
+  //     if (isMountedRef.current) {
+  //       setIsLoading(false);
+  //       setIsRefreshing(false);
+  //     }
+  //   }
+  // };
 
   useEffect(() => {
     // 🚀 LAZY LOADING: Wait 300ms before fetching initial data

@@ -286,7 +286,6 @@ export default function ChatWidget({
               );
               
               if (adminMessages.length > 0 && !isOpen) {
-                // If we're not in the chat, increment unread count
                 const storedUnread = localStorage.getItem(`guest_unread_${guestIdFromStorage}`);
                 const currentUnread = storedUnread ? parseInt(storedUnread) : 0;
                 const newUnread = currentUnread + adminMessages.length;
@@ -757,8 +756,8 @@ export default function ChatWidget({
               >
                 <span>
                   {userRole === 'admin' || userRole === 'Administrator' 
-                    ? 'Chat with Ashie' 
-                    : 'Start a Conversation'}
+                    ? 'Start a Conversation' 
+                    : 'Chat with Ashie'}
                 </span>
                 <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
               </button>

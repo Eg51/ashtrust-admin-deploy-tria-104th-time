@@ -42,6 +42,7 @@ function isPublicRoute(pathname) {
     '/login',
     '/register',
     '/log-in',
+    '/api/prices',  
     '/api/check-password-reset',
     '/api/change-password',    
     '/api/auth/login',
@@ -184,11 +185,9 @@ export async function middleware(request) {
   return handleCORS(request, response);
 }
 
-
 // ---- Configuration - which routes to run on ----
 export const config = {
   matcher: [
-    // Apply to all API routes and protected pages
     '/api/:path*',
     '/Account/:path*',
     '/Dashboard/:path*',
