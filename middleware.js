@@ -22,15 +22,6 @@ function handleCORS(request, response) {
     response.headers.set('Access-Control-Allow-Origin', origin);
     response.headers.set('Access-Control-Allow-Credentials', corsCredentials);
   }
-  // middleware.js - Add this at the end of the middleware function
-
-// ---- 11. Override CSP Headers (Fix CSP Errors) ----
-if (process.env.NODE_ENV === 'development') {
-  response.headers.set(
-    'Content-Security-Policy',
-    "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; script-src * 'unsafe-inline' 'unsafe-eval' data: blob: 'wasm-unsafe-eval'; style-src * 'unsafe-inline'; img-src * data: blob:; connect-src *; font-src *;"
-  );
-}
   return response;
 }
 
@@ -39,12 +30,14 @@ if (process.env.NODE_ENV === 'development') {
  */
 function isPublicRoute(pathname) {
   const publicPaths = [
+    '/',
+    '/Business',
     '/login',
     '/register',
     '/log-in',
-    '/api/prices',  
+    '/api/prices',
     '/api/check-password-reset',
-    '/api/change-password',    
+    '/api/change-password',
     '/api/auth/login',
     '/api/auth/register',
     '/api/auth/check-user',
@@ -119,7 +112,7 @@ export async function middleware(request) {
       );
       return handleCORS(request, response);
     }
-    
+
     // For non-API routes, redirect to login
     const loginUrl = new URL('/log-in', request.url);
     const response = NextResponse.redirect(loginUrl);
