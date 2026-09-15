@@ -3,73 +3,11 @@
 
 import { MongoClient, ObjectId } from "mongodb";
 import { headers } from "next/headers";
+import crypto from "crypto";
 
 const MONGODB_URI = process.env.MONGODB_URI;
 
-/**
- * @typedef {Object} TotalBalance
- * @property {string} amount
- * @property {string} change
- */
-
-/**
- * @typedef {Object} AnalysisBalance
- * @property {string} total
- * @property {string} stocks
- * @property {string} crypto
- * @property {string} etfs
- */
-
-/**
- * @typedef {Object} Bill
- * @property {string} [id]
- * @property {string} [name]
- * @property {string} [title]
- * @property {number|string} amount
- * @property {string} [dueDate]
- * @property {string} [status]
- * @property {string} [category]
- * @property {string} [description]
- */
-
-/**
- * @typedef {Object} Transaction
- * @property {string} id
- * @property {string} merchant
- * @property {string} type
- * @property {string} category
- * @property {string} date
- * @property {string} status
- * @property {string} amount
- * @property {boolean} isNegative
- */
-
-/**
- * @typedef {Object} PaymentMethod
- * @property {string} id
- * @property {string} type
- * @property {string} last4
- * @property {string} brand
- * @property {boolean} isDefault
- */
-
-/**
- * @typedef {Object} DashDataDocument
- * @property {ObjectId} _id
- * @property {string} userId
- * @property {TotalBalance} [totalBalance]
- * @property {AnalysisBalance} [analysisBalance]
- * @property {Bill[]} [bills]
- * @property {Transaction[]} [recentTransactions]
- * @property {PaymentMethod[]} [paymentMethods]
- * @property {Object.<string, any>} [preferences]
- * @property {Date} [updatedAt]
- */
-
-// ---- HELPER: Verify admin on servter action ----
-/**
- * @returns {Promise<void>}
- */
+// ---- HELPER: Verify admin on server action -------------------------------
 async function verifyAdmin() {
   const headersList = await headers();
   const role = headersList.get("x-user-role");
@@ -78,10 +16,7 @@ async function verifyAdmin() {
   }
 }
 
-// ---- 1. GET ALL USERS (For the Dropdown) ----
-/**
- * @returns {Promise<{success: boolean, users?: Array<any>, error?: string}>}
- */
+// ---- 1. GET ALL USERS (For the Dropdown) ---------------------------------
 export async function getAllUsers() {
   try {
     await verifyAdmin();
@@ -91,26 +26,28 @@ export async function getAllUsers() {
     const db = client.db("userRegistration");
     const collection = db.collection("users");
 
-    const users = await collection.find(
-      {}, 
-      { 
-        projection: { 
-          _id: 1, 
-          firstName: 1, 
-          lastName: 1, 
-          username: 1, 
-          email: 1,
-          isActive: 1
-        } 
-      }
-    ).sort({ createdAt: -1 }).toArray();
+    const users = await collection
+      .find(
+        {},
+        {
+          projection: {
+            _id: 1,
+            firstName: 1,
+            lastName: 1,
+            username: 1,
+            email: 1,
+            isActive: 1,
+          },
+        }
+      )
+      .sort({ createdAt: -1 })
+      .toArray();
 
     await client.close();
 
-    // Serialize ObjectId to string to prevent hydration errors
-    const serializedUsers = users.map(user => ({
+    const serializedUsers = users.map((user) => ({
       ...user,
-      _id: user._id.toString()
+      _id: user._id.toString(),
     }));
 
     return { success: true, users: serializedUsers };
@@ -120,11 +57,7 @@ export async function getAllUsers() {
   }
 }
 
-// ---- 2. GET SPECIFIC USER'S DASHDATA ----
-/**
- * @param {string} userId
- * @returns {Promise<{success: boolean, data?: Object, error?: string}>}
- */
+// ---- 2. GET SPECIFIC USER'S DASHDATA -------------------------------------
 export async function getUserDashData(userId) {
   try {
     await verifyAdmin();
@@ -137,25 +70,23 @@ export async function getUserDashData(userId) {
     const dashData = await dashCollection.findOne({ userId });
     await client.close();
 
-    // If no data exists, return rich defaults with the new dashboard fields
     if (!dashData) {
-      return { 
-        success: true, 
-        data: { 
-          totalBalance: { amount: "0.00", change: "0.0%" }, 
-          analysisBalance: { total: "0.00", stocks: "45%", crypto: "35%", etfs: "20%" }, 
-          bills: [], 
-          recentTransactions: [], 
-          paymentMethods: [], 
-          preferences: {} 
-        } 
+      return {
+        success: true,
+        data: {
+          totalBalance: { amount: "0.00", change: "0.0%" },
+          analysisBalance: { total: "0.00", stocks: "45%", crypto: "35%", etfs: "20%" },
+          bills: [],
+          recentTransactions: [],
+          paymentMethods: [],
+          preferences: {},
+        },
       };
     }
 
-    // ✅ Safely serialize MongoDB ObjectId to a plain string to fix React hydration errors
     const sanitizedData = {
       ...dashData,
-      _id: dashData._id.toString(), 
+      _id: dashData._id.toString(),
     };
 
     return { success: true, data: sanitizedData };
@@ -165,12 +96,7 @@ export async function getUserDashData(userId) {
   }
 }
 
-// ---- 3. UPDATE USER'S DASHDATA (CRUD) ----
-/**
- * @param {string} userId
- * @param {Partial<Omit<DashDataDocument, '_id' | 'userId'>>} updates
- * @returns {Promise<{success: boolean, result?: Object, error?: string}>}
- */
+// ---- 3. UPDATE USER'S DASHDATA (CRUD) ------------------------------------
 export async function updateUserDashData(userId, updates) {
   try {
     await verifyAdmin();
@@ -180,18 +106,17 @@ export async function updateUserDashData(userId, updates) {
     const db = client.db("userRegistration");
     const dashCollection = db.collection("dashdata");
 
-    // 🛑 CRITICAL: Destructure and remove '_id' so it doesn't crash MongoDB
     const { _id, ...updateData } = updates;
 
     const result = await dashCollection.updateOne(
       { userId },
-      { 
-        $set: { 
-          ...updateData, 
-          updatedAt: new Date() 
-        } 
+      {
+        $set: {
+          ...updateData,
+          updatedAt: new Date(),
+        },
       },
-      { upsert: true } // Create document if it doesn't exist
+      { upsert: true }
     );
 
     await client.close();
@@ -199,5 +124,63 @@ export async function updateUserDashData(userId, updates) {
   } catch (error) {
     console.error("Error updating dashdata:", error);
     return { success: false, error: "Failed to update dashdata" };
+  }
+}
+
+// ---- 4. ISSUE PASSWORD RESET TOKEN (new) ---------------------------------
+//
+// Generates a one-time reset code for the given user.
+// - Stores the SHA-256 hash + a 15-minute expiry on the user doc
+// - Sets passwordResetEnabled = true (still used as a UI flag, no longer the gate)
+// - Returns the RAW token ONCE — it is never retrievable again
+//
+// The user enters the raw token on the login-page reset form; the server
+// validates it against the stored hash.
+export async function issuePasswordResetToken(userId) {
+  try {
+    await verifyAdmin();
+
+    if (!userId || typeof userId !== "string") {
+      return { success: false, error: "userId required" };
+    }
+
+    // 12 random bytes -> 24 hex chars. Enough entropy to be unguessable.
+    const rawToken = crypto.randomBytes(12).toString("hex");
+    const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+
+    const client = new MongoClient(MONGODB_URI);
+    await client.connect();
+    const db = client.db("userRegistration");
+    const users = db.collection("users");
+
+    const result = await users.updateOne(
+      { _id: new ObjectId(userId) },
+      {
+        $set: {
+          passwordResetEnabled: true,
+          passwordResetTokenHash: tokenHash,
+          passwordResetTokenExpiresAt: expiresAt,
+          updatedAt: new Date(),
+        },
+      }
+    );
+
+    await client.close();
+
+    if (result.matchedCount === 0) {
+      return { success: false, error: "User not found" };
+    }
+
+    return {
+      success: true,
+      token: rawToken,
+      expiresAt: expiresAt.toISOString(),
+      expiresInMinutes: 15,
+    };
+  } catch (error) {
+    console.error("Error issuing reset token:", error);
+    return { success: false, error: error.message || "Failed to issue token" };
   }
 }

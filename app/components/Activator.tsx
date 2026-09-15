@@ -2,13 +2,14 @@
 
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { 
-  UserCheck, 
-  Lock, 
-  Save, 
+import {
+  UserCheck,
+  Lock,
+  Save,
   Loader2,
-  KeyRound
+  KeyRound,
 } from "lucide-react";
+import { issuePasswordResetToken } from "@/app/actions/admin";
 
 interface User {
   id: string;
@@ -19,14 +20,20 @@ interface User {
   isVerified: boolean;
   isActive: boolean;
   role: string;
-  passwordResetEnabled?: boolean; // ✅ ADDED
+  passwordResetEnabled?: boolean;
 }
 
 export default function Activator() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingUserId, setSavingUserId] = useState<string | null>(null);
+  const [issuingUserId, setIssuingUserId] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState("");
+  const [resetCodeModal, setResetCodeModal] = useState<{
+    user: User;
+    token: string;
+    expiresAt: string;
+  } | null>(null);
 
   // Fetch all users
   useEffect(() => {
@@ -52,28 +59,64 @@ export default function Activator() {
 
   // Toggle handlers
   const handleToggleVerify = (userId: string) => {
-    setUsers(prev => prev.map(u => 
+    setUsers(prev => prev.map(u =>
       u.id === userId ? { ...u, isVerified: !u.isVerified } : u
     ));
   };
 
   const handleToggleActive = (userId: string) => {
-    setUsers(prev => prev.map(u => 
+    setUsers(prev => prev.map(u =>
       u.id === userId ? { ...u, isActive: !u.isActive } : u
     ));
   };
 
   const handleRoleChange = (userId: string, role: string) => {
-    setUsers(prev => prev.map(u => 
+    setUsers(prev => prev.map(u =>
       u.id === userId ? { ...u, role } : u
     ));
   };
 
-  // ✅ ADDED: Toggle password reset
-  const handleTogglePasswordReset = (userId: string) => {
-    setUsers(prev => prev.map(u => 
-      u.id === userId ? { ...u, passwordResetEnabled: !u.passwordResetEnabled } : u
-    ));
+  // ✅ CHANGED: Issue a one-time reset code instead of toggling a boolean
+  const handleIssueResetCode = async (user: User) => {
+    if (issuingUserId) return;
+    setIssuingUserId(user.id);
+    setSuccessMessage("");
+
+    try {
+      const result = await issuePasswordResetToken(user.id);
+
+      if (result.success && result.token) {
+        setResetCodeModal({
+          user,
+          token: result.token,
+          expiresAt: result.expiresAt,
+        });
+        // Reflect the flag in the UI
+        setUsers(prev => prev.map(u =>
+          u.id === user.id ? { ...u, passwordResetEnabled: true } : u
+        ));
+      } else {
+        setSuccessMessage(`❌ ${result.error || 'Failed to issue reset code'}`);
+        setTimeout(() => setSuccessMessage(""), 4000);
+      }
+    } catch (error) {
+      console.error('Error issuing reset code:', error);
+      setSuccessMessage('❌ Failed to issue reset code');
+      setTimeout(() => setSuccessMessage(""), 4000);
+    } finally {
+      setIssuingUserId(null);
+    }
+  };
+
+  const copyTokenToClipboard = async () => {
+    if (!resetCodeModal) return;
+    try {
+      await navigator.clipboard.writeText(resetCodeModal.token);
+      setSuccessMessage('✅ Code copied to clipboard');
+      setTimeout(() => setSuccessMessage(""), 2500);
+    } catch {
+      // Older browsers — user can select manually
+    }
   };
 
   // Save specific user
@@ -93,7 +136,8 @@ export default function Activator() {
           isVerified: user.isVerified,
           isActive: user.isActive,
           role: user.role,
-          passwordResetEnabled: user.passwordResetEnabled, // ✅ ADDED
+          // Note: passwordResetEnabled is NOT sent here anymore.
+          // The flag is managed only by issuePasswordResetToken.
         })
       });
 
@@ -154,8 +198,8 @@ export default function Activator() {
                   <button
                     onClick={() => handleToggleVerify(user.id)}
                     className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold transition ${
-                      user.isVerified 
-                        ? 'bg-emerald-500/20 text-emerald-700' 
+                      user.isVerified
+                        ? 'bg-emerald-500/20 text-emerald-700'
                         : 'bg-red-500/20 text-red-700'
                     }`}
                   >
@@ -168,8 +212,8 @@ export default function Activator() {
                   <button
                     onClick={() => handleToggleActive(user.id)}
                     className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold transition ${
-                      user.isActive 
-                        ? 'bg-emerald-500/20 text-emerald-700' 
+                      user.isActive
+                        ? 'bg-emerald-500/20 text-emerald-700'
                         : 'bg-red-500/20 text-red-700'
                     }`}
                   >
@@ -189,18 +233,23 @@ export default function Activator() {
                   </select>
                 </td>
 
-                {/* ✅ ADDED: Password Reset Toggle */}
+                {/* ✅ CHANGED: Issue reset code button */}
                 <td className="px-3 py-3">
                   <button
-                    onClick={() => handleTogglePasswordReset(user.id)}
+                    onClick={() => handleIssueResetCode(user)}
+                    disabled={issuingUserId === user.id}
                     className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold transition ${
-                      user.passwordResetEnabled 
-                        ? 'bg-purple-500/20 text-purple-700' 
-                        : 'bg-gray-500/20 text-gray-600'
-                    }`}
+                      user.passwordResetEnabled
+                        ? 'bg-purple-500/20 text-purple-700 hover:bg-purple-500/30'
+                        : 'bg-cyan-500/20 text-cyan-700 hover:bg-cyan-500/30'
+                    } disabled:opacity-50`}
                   >
-                    <KeyRound size={14} />
-                    {user.passwordResetEnabled ? 'Reset ON' : 'Reset OFF'}
+                    {issuingUserId === user.id ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      <KeyRound size={14} />
+                    )}
+                    {user.passwordResetEnabled ? 'New Code' : 'Issue Code'}
                   </button>
                 </td>
 
@@ -223,6 +272,46 @@ export default function Activator() {
           </tbody>
         </table>
       </div>
+
+      {/* Reset code modal */}
+      {resetCodeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+            <h3 className="text-lg font-bold text-cyan-900 mb-2">
+              Password Reset Code
+            </h3>
+            <p className="text-sm text-cyan-700 mb-4">
+              Give this code to <strong>{resetCodeModal.user.firstName} {resetCodeModal.user.lastName}</strong>.
+              It expires in <strong>15 minutes</strong> and can only be used once.
+            </p>
+
+            <div className="bg-cyan-50 border border-cyan-200 rounded-lg p-4 mb-4">
+              <code className="text-lg font-mono font-bold text-cyan-900 break-all">
+                {resetCodeModal.token}
+              </code>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={copyTokenToClipboard}
+                className="flex-1 px-4 py-2 rounded-lg bg-cyan-600 text-white text-sm font-bold hover:bg-cyan-700 transition"
+              >
+                Copy Code
+              </button>
+              <button
+                onClick={() => setResetCodeModal(null)}
+                className="flex-1 px-4 py-2 rounded-lg border border-cyan-200 text-cyan-700 text-sm font-bold hover:bg-cyan-50 transition"
+              >
+                Close
+              </button>
+            </div>
+
+            <p className="text-xs text-cyan-500 mt-3">
+              ⚠️ This code will not be shown again. Copy it now.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

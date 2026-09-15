@@ -1,5 +1,4 @@
-export const runtime = 'nodejs';
-// middleware.js (root of your project)
+// proxy.js (root of your project)
 import { NextResponse } from 'next/server';
 import { getUserById } from './lib/db/users';
 import { verifyToken } from './lib/security';
@@ -11,13 +10,9 @@ const corsMethods = process.env.CORS_METHODS || 'GET,POST,PUT,DELETE,OPTIONS';
 const corsHeaders = process.env.CORS_ALLOWED_HEADERS || 'Content-Type,Authorization';
 const corsCredentials = process.env.CORS_CREDENTIALS || 'true';
 
-/**
- * Handle CORS headers on a response
- */
 function handleCORS(request, response) {
   const origin = request.headers.get('origin');
   const isAllowedOrigin = allowedOrigins.includes(origin);
-
   if (isAllowedOrigin) {
     response.headers.set('Access-Control-Allow-Origin', origin);
     response.headers.set('Access-Control-Allow-Credentials', corsCredentials);
@@ -25,39 +20,39 @@ function handleCORS(request, response) {
   return response;
 }
 
-/**
- * Check if the route is public (no auth required)
- */
+// ---- Public route whitelist ----
 function isPublicRoute(pathname) {
-  const publicPaths = [
-    '/',
-    '/Business',
+  const publicExact = ['/', '/Business'];
+  if (publicExact.includes(pathname)) return true;
+
+  const publicPrefixes = [
     '/login',
     '/register',
     '/log-in',
+    '/sign-up',
+    '/forgot-password',
+    '/reset-password',
     '/api/prices',
     '/api/check-password-reset',
     '/api/change-password',
     '/api/auth/login',
     '/api/auth/register',
     '/api/auth/check-user',
-    '/sign-up',
-    '/forgot-password',
-    '/reset-password',
     '/_next',
   ];
-  return publicPaths.some(path => pathname.startsWith(path));
+
+  return publicPrefixes.some(
+    (prefix) => pathname === prefix || pathname.startsWith(prefix + '/')
+  );
 }
 
-/**
- * Main middleware – CORS + Authentication
- */
-export async function middleware(request) {
+// ---- Main middleware ----
+export async function proxy(request) {
   const pathname = request.nextUrl.pathname;
   const origin = request.headers.get('origin');
   const isAllowedOrigin = allowedOrigins.includes(origin);
 
-  // ---- 1. Handle OPTIONS preflight requests ----
+  // 1. OPTIONS preflight
   if (request.method === 'OPTIONS') {
     const response = new NextResponse(null, { status: 204 });
     if (isAllowedOrigin) {
@@ -70,13 +65,12 @@ export async function middleware(request) {
     return response;
   }
 
-  // ---- 2. Skip authentication for public routes ----
+  // 2. Public routes
   if (isPublicRoute(pathname)) {
-    const response = NextResponse.next();
-    return handleCORS(request, response);
+    return handleCORS(request, NextResponse.next());
   }
 
-  // ---- 3. Authentication: Try session cookie first ----
+  // 3. Session cookie
   let userId = null;
   const sessionId = request.cookies.get('sessionId')?.value;
   if (sessionId) {
@@ -86,99 +80,91 @@ export async function middleware(request) {
     }
   }
 
-  // ---- 4. If no session, try JWT from Authorization header ----
+  // 4. JWT fallback
   if (!userId) {
     const authHeader = request.headers.get('authorization');
     const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
     if (token) {
       try {
         const decoded = verifyToken(token);
-        if (decoded?.id) {
-          userId = decoded.id;
-        }
+        if (decoded?.id) userId = decoded.id;
       } catch (error) {
         console.error('JWT verification failed:', error);
       }
     }
   }
 
-  // ---- 5. If no valid authentication ----
+  // 5. Unauthenticated
   if (!userId) {
-    // ✅ FIX: For API routes, return JSON error instead of redirecting
     if (pathname.startsWith('/api/')) {
-      const response = NextResponse.json(
-        { success: false, error: 'Authentication required' },
-        { status: 401 }
+      return handleCORS(
+        request,
+        NextResponse.json(
+          { success: false, error: 'Authentication required' },
+          { status: 401 }
+        )
       );
-      return handleCORS(request, response);
     }
-
-    // For non-API routes, redirect to login
-    const loginUrl = new URL('/log-in', request.url);
-    const response = NextResponse.redirect(loginUrl);
-    return handleCORS(request, response);
+    return handleCORS(request, NextResponse.redirect(new URL('/log-in', request.url)));
   }
 
-  // ---- 6. Fetch user from database ----
+  // 6. Load user
   const user = await getUserById(userId);
   if (!user) {
-    // ✅ FIX: For API routes, return JSON error
     if (pathname.startsWith('/api/')) {
-      const response = NextResponse.json(
-        { success: false, error: 'User not found' },
-        { status: 404 }
+      return handleCORS(
+        request,
+        NextResponse.json(
+          { success: false, error: 'User not found' },
+          { status: 404 }
+        )
       );
-      return handleCORS(request, response);
     }
-    const response = NextResponse.json(
-      { error: 'User not found' },
-      { status: 404 }
-    );
-    return handleCORS(request, response);
+    return handleCORS(request, NextResponse.redirect(new URL('/log-in', request.url)));
   }
 
-  // ---- 🆕 7. Admin Route Protection (New) ----
-  if (pathname.startsWith('/me')) {
+  // 7. Admin gate on /me
+  if (pathname === '/me' || pathname.startsWith('/me/')) {
     const isAdmin = user.role === 'admin' || user.isAdmin === true;
     if (!isAdmin) {
-      // Redirect non-admin users to the regular user dashboard
-      const response = NextResponse.redirect(new URL('/Dashboard', request.url));
-      return handleCORS(request, response);
+      return handleCORS(request, NextResponse.redirect(new URL('/Dashboard', request.url)));
     }
   }
 
-  // ---- 8. Check if user is active ----
+  // 8. Active check
   if (!user.isActive) {
-    // ✅ FIX: For API routes, return JSON error
     if (pathname.startsWith('/api/')) {
-      const response = NextResponse.json(
-        { success: false, error: 'Account is deactivated' },
-        { status: 403 }
+      return handleCORS(
+        request,
+        NextResponse.json(
+          { success: false, error: 'Account is deactivated' },
+          { status: 403 }
+        )
       );
-      return handleCORS(request, response);
     }
-    const response = NextResponse.json(
-      { error: 'Account is deactivated' },
-      { status: 403 }
-    );
-    return handleCORS(request, response);
+    return handleCORS(request, NextResponse.redirect(new URL('/log-in', request.url)));
   }
 
-  // ---- 9. Attach user info to request headers (for App Router) ----
-  const response = NextResponse.next();
-  response.headers.set('x-user-id', user._id.toString());
-  response.headers.set('x-user-email', user.email);
-  response.headers.set('x-user-username', user.username);
-  response.headers.set('x-user-firstName', user.firstName);
-  response.headers.set('x-user-lastName', user.lastName);
-  response.headers.set('x-user-displayName', user.displayName || user.username);
-  response.headers.set('x-user-role', user.role);
+  // 9. Forward user headers into the REQUEST
+  // Route handlers and server actions read from request.headers.
+  const forwardedHeaders = new Headers(request.headers);
+  forwardedHeaders.set('x-user-id', user._id.toString());
+  forwardedHeaders.set('x-user-email', user.email || '');
+  forwardedHeaders.set('x-user-username', user.username || '');
+  forwardedHeaders.set('x-user-firstName', user.firstName || '');
+  forwardedHeaders.set('x-user-lastName', user.lastName || '');
+  forwardedHeaders.set('x-user-displayName', user.displayName || user.username || '');
+  forwardedHeaders.set('x-user-role', user.role || 'user');
 
-  // ---- 10. Apply CORS headers ----
+  const response = NextResponse.next({
+    request: { headers: forwardedHeaders },
+  });
+
+  // 10. CORS
   return handleCORS(request, response);
 }
 
-// ---- Configuration - which routes to run on ----
+// ---- Config ----
 export const config = {
   matcher: [
     '/api/:path*',

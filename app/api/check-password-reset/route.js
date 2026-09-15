@@ -1,45 +1,9 @@
-// // app/api/check-password-reset/route.js
-// import { NextResponse } from 'next/server';
-// import { getUserByEmail } from '@/lib/db/users';
+// app/api/check-password-reset/route.js
+//
+// Called from the login page (and /forgot-password).
+// Returns whether the user has an ACTIVE reset token — not just the boolean
+// passwordResetEnabled flag, which on its own authorizes nothing anymore.
 
-// export const runtime = 'nodejs';
-
-// export async function POST(request) {
-//   try {
-//     const body = await request.json();
-//     const { email } = body;
-
-//     if (!email) {
-//       return NextResponse.json(
-//         { success: false, error: 'Email is required' },
-//         { status: 400 }
-//       );
-//     }
-
-//     const user = await getUserByEmail(email);
-//     if (!user) {
-//       return NextResponse.json(
-//         { success: false, error: 'User not found' },
-//         { status: 404 }
-//       );
-//     }
-
-//     // Return whether or not the admin has enabled the reset
-//     return NextResponse.json({
-//       success: true,
-//       data: {
-//         passwordResetEnabled: user.passwordResetEnabled === true,
-//       }
-//     });
-
-//   } catch (error) {
-//     console.error('Error checking reset status:', error);
-//     return NextResponse.json(
-//       { success: false, error: 'Internal server error' },
-//       { status: 500 }
-//     );
-//   }
-// }// app/api/check-password-reset/route.js
 import { NextResponse } from 'next/server';
 import { getUserByEmail, getUserByUsername } from '@/lib/db/users';
 
@@ -50,7 +14,6 @@ export async function POST(request) {
     const body = await request.json();
     const { email, identifier } = body;
 
-    // Support both old (email) and new (identifier) parameter names
     const searchIdentifier = identifier || email;
 
     if (!searchIdentifier) {
@@ -60,10 +23,7 @@ export async function POST(request) {
       );
     }
 
-    // First try to find user by email (using existing function)
     let user = await getUserByEmail(searchIdentifier);
-
-    // If not found by email, try to find by username
     if (!user) {
       user = await getUserByUsername(searchIdentifier);
     }
@@ -75,7 +35,12 @@ export async function POST(request) {
       );
     }
 
-    // Return whether or not the admin has enabled the reset
+    // A reset is only "available" if a token exists AND hasn't expired.
+    const hasValidToken =
+      !!user.passwordResetTokenHash &&
+      !!user.passwordResetTokenExpiresAt &&
+      new Date(user.passwordResetTokenExpiresAt).getTime() > Date.now();
+
     return NextResponse.json({
       success: true,
       data: {
@@ -85,10 +50,11 @@ export async function POST(request) {
           firstName: user.firstName || '',
           lastName: user.lastName || '',
         },
-        passwordResetEnabled: user.passwordResetEnabled === true,
-      }
+        // Same field name so existing UI code doesn't need to change.
+        passwordResetEnabled: hasValidToken,
+        expiresAt: hasValidToken ? user.passwordResetTokenExpiresAt : null,
+      },
     });
-
   } catch (error) {
     console.error('Error checking reset status:', error);
     return NextResponse.json(

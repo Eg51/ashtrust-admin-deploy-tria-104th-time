@@ -1,12 +1,14 @@
+// 
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { KeyRound, Loader2, CheckCircle, XCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 export default function LoginPasswordReset({ userEmail }: { userEmail: string }) {
   const router = useRouter();
+  const [resetToken, setResetToken] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -23,6 +25,10 @@ export default function LoginPasswordReset({ userEmail }: { userEmail: string })
       setMessage({ type: 'error', text: 'Password must be at least 8 characters.' });
       return;
     }
+    if (!resetToken.trim()) {
+      setMessage({ type: 'error', text: 'Reset code is required. Ask an admin to issue one.' });
+      return;
+    }
 
     setIsLoading(true);
     setMessage(null);
@@ -31,7 +37,11 @@ export default function LoginPasswordReset({ userEmail }: { userEmail: string })
       const response = await fetch('/api/change-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: userEmail, newPassword })
+        body: JSON.stringify({
+          identifier: userEmail,
+          newPassword,
+          resetToken: resetToken.trim(),
+        }),
       });
 
       const data = await response.json();
@@ -40,7 +50,7 @@ export default function LoginPasswordReset({ userEmail }: { userEmail: string })
         setMessage({ type: 'success', text: 'Password reset successful! You can now log in.' });
         setTimeout(() => router.push('/log-in'), 2000);
       } else {
-        setMessage({ type: 'error', text: data.error || 'Reset failed. Ask admin to re-enable.' });
+        setMessage({ type: 'error', text: data.error || 'Reset failed. Ask admin to re-issue a code.' });
       }
     } catch (error) {
       console.error('Error resetting password:', error);
@@ -58,7 +68,7 @@ export default function LoginPasswordReset({ userEmail }: { userEmail: string })
     >
       <h3 className="text-sm font-bold text-cyan-900 mb-2 flex items-center gap-2">
         <KeyRound size={16} className="text-cyan-600" />
-        Password Reset enabled 
+        Password Reset
       </h3>
 
       {message && (
@@ -72,21 +82,32 @@ export default function LoginPasswordReset({ userEmail }: { userEmail: string })
 
       <form onSubmit={handleReset} className="space-y-3">
         <input
+          type="text"
+          value={resetToken}
+          onChange={(e) => setResetToken(e.target.value)}
+          placeholder="Reset code (from admin)"
+          autoComplete="off"
+          required
+          className="w-full rounded-lg bg-white/50 px-4 py-2 text-sm font-bold text-cyan-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 border-none shadow-inner"
+        />
+
+        <input
           type="password"
           value={newPassword}
           onChange={(e) => setNewPassword(e.target.value)}
           placeholder="New Password"
-          pattern="(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%^&*]).{8,}"
-title="Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character."
-required
+          pattern='(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%^&*(),.?":{}|<>]).{8,}'
+          title="Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character."
+          required
           className="w-full rounded-lg bg-white/50 px-4 py-2 text-sm font-bold text-cyan-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 border-none shadow-inner"
         />
+
         <input
           type="password"
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
           placeholder="Confirm New Password"
-          pattern="(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%^&*]).{8,}"
+          pattern='(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%^&*(),.?":{}|<>]).{8,}'
           title="Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character."
           required
           className="w-full rounded-lg bg-white/50 px-4 py-2 text-sm font-bold text-cyan-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 border-none shadow-inner"
@@ -100,7 +121,9 @@ required
           className="w-full rounded-xl bg-gradient-to-r from-purple-500 to-pink-600 py-2.5 text-sm font-bold text-white shadow-lg disabled:opacity-50"
         >
           {isLoading ? (
-            <span className="flex items-center justify-center gap-2"><Loader2 size={16} className="animate-spin" /> Resetting...</span>
+            <span className="flex items-center justify-center gap-2">
+              <Loader2 size={16} className="animate-spin" /> Resetting...
+            </span>
           ) : (
             'Reset'
           )}
