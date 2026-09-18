@@ -753,7 +753,7 @@
 //   );
 // }
 
-// app/log-in/page.tsx
+// app/components/Logge.tsx
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -775,6 +775,7 @@ import {
 import ChatWidgett from '@/app/components/ChatWidgett';
 import MarketStatus from '@/app/components/MarketStatus';
 import LoginPasswordReset from '@/app/components/LoginPasswordReset';
+import AccountBlockedModal from '@/app/components/AccountBlockedModal';
 
 // ---- Types ----------------------------------------------------------------
 
@@ -832,6 +833,13 @@ export default function LoginPage() {
   // Password Reset State
   const [showResetForm, setShowResetForm] = useState(false);
   const [isCheckingReset, setIsCheckingReset] = useState(false);
+  // Account blocked modal — shown when login returns reason: 'inactive' | 'locked'
+  const [blockedInfo, setBlockedInfo] = useState<{
+    reason: 'inactive' | 'locked';
+    message: string | null;
+    email: string | null;
+  } | null>(null);
+
 
   useEffect(() => {
     setMounted(true);
@@ -898,7 +906,25 @@ export default function LoginPage() {
 
       const result = await response.json();
 
+      // if (!response.ok) {
+      //   if (response.status === 429) {
+      //     setIsLocked(true);
+      //     setError(result.error || 'Account locked. Please contact support.');
+      //     setRemainingAttempts(0);
+      //     return;
+      //   }
       if (!response.ok) {
+        // NEW: Account-blocked reasons — show modal instead of plain error
+        if (result.reason === 'inactive' || result.reason === 'locked') {
+          setBlockedInfo({
+            reason: result.reason,
+            message: result.blockMessage || null,
+            email: result.contactEmail || null,
+          });
+          setIsLoading(false);
+          return;
+        }
+
         if (response.status === 429) {
           setIsLocked(true);
           setError(result.error || 'Account locked. Please contact support.');
@@ -1158,6 +1184,14 @@ export default function LoginPage() {
           </motion.div>
         </div>
       </motion.div>
+      {/* Account blocked modal — inactive or locked */}
+      <AccountBlockedModal
+        isOpen={!!blockedInfo}
+        onClose={() => setBlockedInfo(null)}
+        reason={blockedInfo?.reason ?? null}
+        blockMessage={blockedInfo?.message}
+        contactEmail={blockedInfo?.email}
+      />
       
       <ChatWidgett />
     </div>

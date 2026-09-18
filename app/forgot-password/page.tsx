@@ -5,13 +5,12 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  User, 
-  KeyRound, 
-  Loader2, 
+import {
+  User,
+  KeyRound,
+  Loader2,
   AlertCircle,
   Mail,
-  Phone,
   ArrowLeft,
   X,
   MessageCircle
@@ -23,21 +22,24 @@ export default function ForgotPasswordPage() {
   const [identifier, setIdentifier] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState<'input' | 'reset-form'>('input');
-  const [userData, setUserData] = useState<{ 
-    email: string; 
-    username: string; 
-    firstName: string; 
+  const [userData, setUserData] = useState<{
+    email: string;
+    username: string;
+    firstName: string;
     lastName: string;
   } | null>(null);
-  
+
   // Modal state
   const [showModal, setShowModal] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
   const [modalMessage, setModalMessage] = useState('');
 
-  // Contact info
-  const supportEmail = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || 'support@yourapp.com';
-  const supportPhone = process.env.NEXT_PUBLIC_SUPPORT_PHONE || '+1-800-555-0199';
+  // ✅ NEW: admin-set contact email from the user doc (populated when we have a user)
+  const [contactEmail, setContactEmail] = useState<string | null>(null);
+
+  // Fallback for cases where we never reached a user (empty input, network error)
+  const fallbackSupportEmail =
+    process.env.NEXT_PUBLIC_SUPPORT_EMAIL || 'support@ashtrust.com';
 
   // ---- Handlers ------------------------------------------------------------
 
@@ -51,6 +53,7 @@ export default function ForgotPasswordPage() {
     }
 
     setIsLoading(true);
+    setContactEmail(null); // reset from any previous attempt
 
     try {
       const response = await fetch('/api/check-password-reset', {
@@ -77,13 +80,17 @@ export default function ForgotPasswordPage() {
           lastName: data.data.user.lastName || ''
         });
 
+        // ✅ NEW: pull the admin-set contact email if present
+        if (data.data.loginBlockContactEmail) {
+          setContactEmail(data.data.loginBlockContactEmail);
+        }
+
         if (data.data.passwordResetEnabled) {
           setStep('reset-form');
         } else {
           showErrorModal(
             'Password Reset Not Enabled',
-            `Password reset has not been enabled for this account. 
-            Please contact the administrator to request password reset access.`
+            `Password reset has not been enabled for this account.\nPlease contact the administrator to request password reset access.`
           );
         }
       }
@@ -104,16 +111,14 @@ export default function ForgotPasswordPage() {
     setShowModal(true);
   };
 
-  // ✅ PUT THE FUNCTION HERE - After showErrorModal
   const handleContactSupport = () => {
     setShowModal(false);
-    
+
     // Try to open the chat widget by clicking the floating button
     const chatToggle = document.querySelector('button[aria-label="Open chat"]') as HTMLElement;
     if (chatToggle) {
       chatToggle.click();
-      
-      // Wait for chat to open, then click "Start a Conversation"
+
       setTimeout(() => {
         const startChatBtn = document.querySelector('.group.w-full.rounded-2xl') as HTMLElement;
         if (startChatBtn) {
@@ -121,18 +126,15 @@ export default function ForgotPasswordPage() {
         }
       }, 400);
     } else {
-      // Fallback: try custom event
       window.dispatchEvent(new CustomEvent('openChatWidget'));
-      
-      // Fallback: scroll to chat widget
+
       const chatWidget = document.querySelector('[data-chat-widget]');
       if (chatWidget) {
         chatWidget.scrollIntoView({ behavior: 'smooth' });
       }
-      
-      // Final fallback: navigate to support page
+
       setTimeout(() => {
-        const userRole = localStorage.getItem('user') ? 
+        const userRole = localStorage.getItem('user') ?
           JSON.parse(localStorage.getItem('user') || '{}').role : 'user';
         const supportPath = userRole === 'admin' ? '/Support/admin' : '/Support/user';
         router.push(supportPath);
@@ -141,6 +143,7 @@ export default function ForgotPasswordPage() {
   };
 
   // ---- Modal Component ----------------------------------------------------
+
   const ErrorModal = () => (
     <AnimatePresence>
       {showModal && (
@@ -165,28 +168,25 @@ export default function ForgotPasswordPage() {
               <div className="mx-auto rounded-full bg-red-500/20 p-3 w-14 h-14 flex items-center justify-center">
                 <AlertCircle className="h-7 w-7 text-red-600" />
               </div>
-              
+
               <h3 className="mt-4 text-lg font-bold text-cyan-900">
                 {modalTitle}
               </h3>
-              
+
               <p className="mt-2 text-sm text-cyan-700 whitespace-pre-line">
                 {modalMessage}
               </p>
 
+              {/* ✅ UPDATED: email only — no phone row */}
               <div className="mt-4 space-y-2 text-left bg-white/30 rounded-lg p-3">
                 <div className="flex items-center gap-2 text-sm text-cyan-700">
                   <Mail className="h-4 w-4 text-cyan-600 flex-shrink-0" />
-                  <span>Email: {supportEmail}</span>
+                  <span className="break-all">
+                    Email: {contactEmail || fallbackSupportEmail}
+                  </span>
                 </div>
-                {supportPhone && (
-                  <div className="flex items-center gap-2 text-sm text-cyan-700">
-                    <Phone className="h-4 w-4 text-cyan-600 flex-shrink-0" />
-                    <span>Phone: {supportPhone}</span>
-                  </div>
-                )}
               </div>
-              
+
               <div className="mt-6 space-y-3">
                 <button
                   onClick={handleContactSupport}
@@ -212,7 +212,8 @@ export default function ForgotPasswordPage() {
     </AnimatePresence>
   );
 
-  // ---- Render ----------------------------------------------------------------
+  // ---- Render --------------------------------------------------------------
+
   return (
     <div className="min-h-screen w-full bg-gradient-to-br from-blue-200 via-cyan-100 to-gray-300 px-4 py-6 sm:px-6 md:px-8 flex items-center justify-center">
       <motion.div
@@ -229,8 +230,8 @@ export default function ForgotPasswordPage() {
               {step === 'input' ? 'Reset Password' : 'Set New Password'}
             </h2>
             <p className="mt-1 text-sm text-cyan-600">
-              {step === 'input' 
-                ? 'Enter your username or email to continue' 
+              {step === 'input'
+                ? 'Enter your username or email to continue'
                 : `Resetting password for: ${userData?.email || identifier}`}
             </p>
           </div>
@@ -287,7 +288,7 @@ export default function ForgotPasswordPage() {
           {step === 'reset-form' && userData && (
             <div className="mt-6">
               <LoginPasswordReset userEmail={userData.email} />
-              
+
               <div className="mt-4 text-center">
                 <Link
                   href="/log-in"

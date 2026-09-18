@@ -184,3 +184,85 @@ export async function issuePasswordResetToken(userId) {
     return { success: false, error: error.message || "Failed to issue token" };
   }
 }
+// ---- 5. GET USER LOGIN BLOCK SETTINGS ------------------------------------
+export async function getUserLoginBlock(userId) {
+  try {
+    await verifyAdmin();
+
+    if (!userId || typeof userId !== "string") {
+      return { success: false, error: "userId required" };
+    }
+
+    const client = new MongoClient(MONGODB_URI);
+    await client.connect();
+    const db = client.db("userRegistration");
+    const users = db.collection("users");
+
+    const user = await users.findOne(
+      { _id: new ObjectId(userId) },
+      { projection: { loginBlockMessage: 1, loginBlockContactEmail: 1, _id: 0 } }
+    );
+
+    await client.close();
+
+    if (!user) {
+      return { success: false, error: "User not found" };
+    }
+
+    return {
+      success: true,
+      data: {
+        loginBlockMessage: user.loginBlockMessage || "",
+        loginBlockContactEmail: user.loginBlockContactEmail || "",
+      },
+    };
+  } catch (error) {
+    console.error("Error fetching login block:", error);
+    return { success: false, error: "Failed to fetch login block settings" };
+  }
+}
+
+// ---- 6. UPDATE USER LOGIN BLOCK SETTINGS ---------------------------------
+export async function updateUserLoginBlock(userId, data) {
+  try {
+    await verifyAdmin();
+
+    if (!userId || typeof userId !== "string") {
+      return { success: false, error: "userId required" };
+    }
+
+    const message = typeof data?.loginBlockMessage === "string"
+      ? data.loginBlockMessage.trim().slice(0, 500)
+      : "";
+    const email = typeof data?.loginBlockContactEmail === "string"
+      ? data.loginBlockContactEmail.trim().slice(0, 100)
+      : "";
+
+    const client = new MongoClient(MONGODB_URI);
+    await client.connect();
+    const db = client.db("userRegistration");
+    const users = db.collection("users");
+
+    const result = await users.updateOne(
+      { _id: new ObjectId(userId) },
+      {
+        $set: {
+          loginBlockMessage: message,
+          loginBlockContactEmail: email,
+          updatedAt: new Date(),
+        },
+      }
+    );
+
+    await client.close();
+
+    if (result.matchedCount === 0) {
+      return { success: false, error: "User not found" };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error updating login block:", error);
+    return { success: false, error: "Failed to update login block settings" };
+  }
+}

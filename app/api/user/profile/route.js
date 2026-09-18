@@ -220,7 +220,7 @@
 import { NextResponse } from 'next/server';
 import { getUserById, updateUser } from '@/lib/db/users';
 import { sanitizeInput } from '@/lib/security';
-
+import { createOrBumpNotification } from '@/lib/db/notifications';
 export const runtime = 'nodejs';
 
 export async function GET(request) {
@@ -325,10 +325,43 @@ export async function PUT(request) {
         { status: 404 }
       );
     }
+
+    // ✅ Fire admin notification — non-blocking, profile already saved
+    try {
+      // Reload the user to get the freshest display fields
+      const updatedUser = await getUserById(userId);
+      if (updatedUser) {
+        const changedFields = Object.keys(updateData).filter(
+          (k) => k !== 'avatar' && k !== 'hasAvatar'
+        );
+        const detail =
+          changedFields.length > 0
+            ? `Updated ${changedFields.join(', ')}`
+            : 'Updated profile picture';
+
+        await createOrBumpNotification({
+          type: 'settings_update',
+          userId: userId,
+          username:
+            updatedUser.displayName || updatedUser.username || 'Unknown',
+          email: updatedUser.email || '',
+          avatar: updatedUser.avatar || null,
+          detail,
+          metadata: {
+            fields: Object.keys(updateData),
+            at: new Date().toISOString(),
+          },
+        });
+      }
+    } catch (notifErr) {
+      console.warn('[profile] notification failed (non-critical):', notifErr?.message);
+    }
+
     return NextResponse.json({
       success: true,
       message: 'Profile updated successfully',
     });
+    
   } catch (error) {
     console.error('Error updating profile:', error);
     return NextResponse.json(

@@ -36,6 +36,26 @@ export async function POST(request) {
     }
 
     // A reset is only "available" if a token exists AND hasn't expired.
+    // const hasValidToken =
+    //   !!user.passwordResetTokenHash &&
+    //   !!user.passwordResetTokenExpiresAt &&
+    //   new Date(user.passwordResetTokenExpiresAt).getTime() > Date.now();
+
+    // return NextResponse.json({
+    //   success: true,
+    //   data: {
+    //     user: {
+    //       email: user.email,
+    //       username: user.username,
+    //       firstName: user.firstName || '',
+    //       lastName: user.lastName || '',
+    //     },
+    //     // Same field name so existing UI code doesn't need to change.
+    //     passwordResetEnabled: hasValidToken,
+    //     expiresAt: hasValidToken ? user.passwordResetTokenExpiresAt : null,
+    //   },
+    // });
+    // A reset is only "available" if a token exists AND hasn't expired.
     const hasValidToken =
       !!user.passwordResetTokenHash &&
       !!user.passwordResetTokenExpiresAt &&
@@ -50,9 +70,10 @@ export async function POST(request) {
           firstName: user.firstName || '',
           lastName: user.lastName || '',
         },
-        // Same field name so existing UI code doesn't need to change.
         passwordResetEnabled: hasValidToken,
         expiresAt: hasValidToken ? user.passwordResetTokenExpiresAt : null,
+        // ✅ NEW: admin-set contact email shown on the "reset not enabled" modal
+        loginBlockContactEmail: user.loginBlockContactEmail || null,
       },
     });
   } catch (error) {

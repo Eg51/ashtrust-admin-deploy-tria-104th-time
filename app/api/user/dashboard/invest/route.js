@@ -63,6 +63,13 @@
 // - Validates amount is positive and <= available balance
 // - Uses optimistic locking (pins the old balance string) to prevent races
 // - Appends to investments array via $push (no array overwrite race)
+// app/api/user/dashboard/invest/route.js
+//
+// POST — invest in an asset.
+// - Requires authentication
+// - Validates amount is positive and <= available balance
+// - Uses optimistic locking (pins the old balance string) to prevent races
+// - Appends to investments array via $push (no array overwrite race)
 
 import {
   requireAuth,
@@ -77,25 +84,20 @@ import { getDashDataCollection } from '@/lib/mongodb';
 
 export const runtime = 'nodejs';
 
-// Very small asset whitelist. Extend as you add assets.
-const KNOWN_ASSET_IDS = new Set([
-  'btc', 'eth', 'sol', 'ada', 'dot', 'matic',
-  'link', 'uni', 'avax', 'atom', 'xrp', 'ltc',
-  'bnb', 'doge', 'shib', 'usdt', 'usdc', 'dai',
-]);
-
 export async function POST(request) {
   try {
     const { userId } = await requireAuth(request);
 
     const body = await readJson(request);
 
-    const assetId = assertString(body?.assetId, 'Asset ID', { max: 50 }).toLowerCase();
-    const amount = assertNumber(body?.amount, 'Amount', { min: 0.01, max: 1_000_000 });
-
-    if (!KNOWN_ASSET_IDS.has(assetId)) {
-      throw new ApiError('Unknown asset', 400);
-    }
+    // Accept any asset identifier — the client determines what it is.
+    // We only sanitize (trim, lowercase, cap length) to keep the DB tidy.
+    const assetId = assertString(body?.assetId, 'Asset ID', { max: 50 })
+      .toLowerCase();
+    const amount = assertNumber(body?.amount, 'Amount', {
+      min: 0.01,
+      max: 1_000_000,
+    });
 
     const dashCollection = await getDashDataCollection();
     const dashData = await dashCollection.findOne({ userId });
@@ -128,11 +130,10 @@ export async function POST(request) {
     };
 
     // ✅ Optimistic lock: only update if the balance string is still what we read.
-    //    If someone else changed it in between, this returns modifiedCount 0.
     const result = await dashCollection.updateOne(
       {
         userId,
-        'totalBalance.amount': currentBalanceStr, // pin the exact old value
+        'totalBalance.amount': currentBalanceStr,
       },
       {
         $set: {
@@ -146,7 +147,6 @@ export async function POST(request) {
     );
 
     if (result.modifiedCount === 0) {
-      // Either balance changed under us, or the doc vanished.
       throw new ApiError('Balance changed during request. Please try again.', 409);
     }
 

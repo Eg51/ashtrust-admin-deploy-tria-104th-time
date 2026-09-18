@@ -469,8 +469,13 @@ export default function Dash() {
         const portfolioAmount = parseFloat(userData.totalBalance?.amount) || 0;
         const portfolioValueStr = `${portfolioAmount.toFixed(2)}`;
         const portfolioChange = userData.totalBalance?.change || "0.0%";
+
+        // const analysisNoteValue = userData.analysisNote ? parseFloat(userData.analysisNote) : 0;
+        // const assetTotalStr = analysisNoteValue > 0 ? `${analysisNoteValue.toFixed(2)}` : "0.00";
         const analysisNoteValue = userData.analysisNote ? parseFloat(userData.analysisNote) : 0;
-        const assetTotalStr = analysisNoteValue > 0 ? `${analysisNoteValue.toFixed(2)}` : "0.00";
+        const investmentsTotal = (userData.investments || [])
+          .reduce((sum: number, inv: any) => sum + (Number(inv?.amount) || 0), 0);
+        const assetTotalStr = investmentsTotal.toFixed(2);
 
         setDashboardData({
           portfolioValue: portfolioValueStr, portfolioChange: portfolioChange, assetTotal: assetTotalStr,
