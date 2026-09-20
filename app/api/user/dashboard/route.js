@@ -142,119 +142,201 @@
 // - Appends to investments array via $push (no array overwrite race)
 // - Fires an admin "purchase" notification (non-blocking)
 
+
+
+// import {
+//   requireAuth,
+//   readJson,
+//   jsonOk,
+//   jsonError,
+//   ApiError,
+//   assertNumber,
+//   assertString,
+// } from '@/lib/api-helpers';
+// import { getDashDataCollection } from '@/lib/mongodb';
+// import { createOrBumpNotification } from '@/lib/db/notifications';
+
+// export const runtime = 'nodejs';
+
+// export async function POST(request) {
+//   try {
+//     // ✅ requireAuth also returns the user doc — no extra DB round trip needed
+//     const { userId, user } = await requireAuth(request);
+
+//     const body = await readJson(request);
+
+//     // Accept any asset identifier — the client determines what it is.
+//     // Only sanitize (trim, lowercase, cap length) to keep the DB tidy.
+//     const assetId = assertString(body?.assetId, 'Asset ID', { max: 50 })
+//       .toLowerCase();
+//     const amount = assertNumber(body?.amount, 'Amount', {
+//       min: 0.01,
+//       max: 1_000_000,
+//     });
+
+//     const dashCollection = await getDashDataCollection();
+//     const dashData = await dashCollection.findOne({ userId });
+
+//     if (!dashData) {
+//       throw new ApiError('No dashboard data found', 404);
+//     }
+
+//     // Parse current balance from string
+//     const currentBalanceStr = String(dashData.totalBalance?.amount ?? '0');
+//     const currentBalance = parseFloat(currentBalanceStr);
+//     if (Number.isNaN(currentBalance)) {
+//       throw new ApiError('Invalid balance on record', 500);
+//     }
+
+//     // ✅ Server-side balance check — the client cannot bypass this
+//     if (amount > currentBalance) {
+//       throw new ApiError('Insufficient balance', 400);
+//     }
+
+//     const newBalance = currentBalance - amount;
+//     const newBalanceStr = newBalance.toFixed(2);
+
+//     const newInvestment = {
+//       id: `inv_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+//       assetId,
+//       amount,
+//       purchasePrice: 0,
+//       date: new Date().toISOString(),
+//     };
+
+//     // ✅ Optimistic lock: only update if the balance string is still what we read.
+//     const result = await dashCollection.updateOne(
+//       {
+//         userId,
+//         'totalBalance.amount': currentBalanceStr,
+//       },
+//       {
+//         $set: {
+//           'totalBalance.amount': newBalanceStr,
+//           updatedAt: new Date(),
+//         },
+//         $push: {
+//           investments: newInvestment,
+//         },
+//       }
+//     );
+
+//     if (result.modifiedCount === 0) {
+//       throw new ApiError('Balance changed during request. Please try again.', 409);
+//     }
+
+//     // ✅ Fire admin notification — non-blocking, purchase already succeeded
+//     try {
+//       await createOrBumpNotification({
+//         type: 'purchase',
+//         userId,
+//         username: user.displayName || user.username || 'Unknown',
+//         email: user.email || '',
+//         avatar: user.avatar || null,
+//         detail: `Bought $${amount.toFixed(2)} of ${assetId.toUpperCase()}`,
+//         metadata: {
+//           assetId,
+//           amount,
+//           newBalance: newBalanceStr,
+//           investmentId: newInvestment.id,
+//           at: new Date().toISOString(),
+//         },
+//       });
+//     } catch (notifErr) {
+//       console.warn('[invest] notification failed (non-critical):', notifErr?.message);
+//     }
+
+//     return jsonOk({
+//       data: {
+//         newBalance: newBalanceStr,
+//         newInvestment,
+//       },
+//     });
+//   } catch (error) {
+//     if (error instanceof ApiError) {
+//       return jsonError(error.message, error.status);
+//     }
+//     console.error('[invest] error:', error);
+//     return jsonError('Failed to complete investment', 500);
+//   }
+// }
+
+// app/api/user/dashboard/route.js
+//
+// GET — return the user's dashboard data.
+// - Requires auth (requireAuth returns { userId, user } with no extra DB round trip)
+// - Reads the user's dashdata document
+// - Computes bill stats (total, paid, unpaid, overdue) so the client can
+//   gate withdrawals on unpaidBills without doing the math itself.
+// - Returns the raw `bills` array too — Card.tsx filters it locally for
+//   the "unpaid bills" modal.
+// - Returns `investments` so Dash.tsx can compute the Assets card total.
+
 import {
   requireAuth,
-  readJson,
   jsonOk,
   jsonError,
   ApiError,
-  assertNumber,
-  assertString,
 } from '@/lib/api-helpers';
 import { getDashDataCollection } from '@/lib/mongodb';
-import { createOrBumpNotification } from '@/lib/db/notifications';
 
 export const runtime = 'nodejs';
 
-export async function POST(request) {
+export async function GET(request) {
   try {
-    // ✅ requireAuth also returns the user doc — no extra DB round trip needed
-    const { userId, user } = await requireAuth(request);
-
-    const body = await readJson(request);
-
-    // Accept any asset identifier — the client determines what it is.
-    // Only sanitize (trim, lowercase, cap length) to keep the DB tidy.
-    const assetId = assertString(body?.assetId, 'Asset ID', { max: 50 })
-      .toLowerCase();
-    const amount = assertNumber(body?.amount, 'Amount', {
-      min: 0.01,
-      max: 1_000_000,
-    });
+    const { userId } = await requireAuth(request);
 
     const dashCollection = await getDashDataCollection();
     const dashData = await dashCollection.findOne({ userId });
 
     if (!dashData) {
-      throw new ApiError('No dashboard data found', 404);
+      throw new ApiError('Dashboard data not found', 404);
     }
 
-    // Parse current balance from string
-    const currentBalanceStr = String(dashData.totalBalance?.amount ?? '0');
-    const currentBalance = parseFloat(currentBalanceStr);
-    if (Number.isNaN(currentBalance)) {
-      throw new ApiError('Invalid balance on record', 500);
-    }
+    const bills = Array.isArray(dashData.bills) ? dashData.bills : [];
 
-    // ✅ Server-side balance check — the client cannot bypass this
-    if (amount > currentBalance) {
-      throw new ApiError('Insufficient balance', 400);
-    }
+    const totalBills = bills.length;
+    const paidBills = bills.filter((b) => b.status === 'paid').length;
+    const unpaidBills = bills.filter((b) => b.status === 'unpaid').length;
+    const overdueBills = bills.filter((b) => b.status === 'overdue').length;
 
-    const newBalance = currentBalance - amount;
-    const newBalanceStr = newBalance.toFixed(2);
-
-    const newInvestment = {
-      id: `inv_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-      assetId,
-      amount,
-      purchasePrice: 0,
-      date: new Date().toISOString(),
-    };
-
-    // ✅ Optimistic lock: only update if the balance string is still what we read.
-    const result = await dashCollection.updateOne(
-      {
-        userId,
-        'totalBalance.amount': currentBalanceStr,
-      },
-      {
-        $set: {
-          'totalBalance.amount': newBalanceStr,
-          updatedAt: new Date(),
-        },
-        $push: {
-          investments: newInvestment,
-        },
-      }
-    );
-
-    if (result.modifiedCount === 0) {
-      throw new ApiError('Balance changed during request. Please try again.', 409);
-    }
-
-    // ✅ Fire admin notification — non-blocking, purchase already succeeded
-    try {
-      await createOrBumpNotification({
-        type: 'purchase',
-        userId,
-        username: user.displayName || user.username || 'Unknown',
-        email: user.email || '',
-        avatar: user.avatar || null,
-        detail: `Bought $${amount.toFixed(2)} of ${assetId.toUpperCase()}`,
-        metadata: {
-          assetId,
-          amount,
-          newBalance: newBalanceStr,
-          investmentId: newInvestment.id,
-          at: new Date().toISOString(),
-        },
-      });
-    } catch (notifErr) {
-      console.warn('[invest] notification failed (non-critical):', notifErr?.message);
-    }
+    const totalSpent = bills
+      .filter((b) => b.status === 'paid')
+      .reduce((sum, b) => sum + (Number(b.amount) || 0), 0);
 
     return jsonOk({
       data: {
-        newBalance: newBalanceStr,
-        newInvestment,
+        totalBalance: dashData.totalBalance || { amount: '0.00', change: '0.0%' },
+        analysisBalance: dashData.analysisBalance || {
+          total: '0.00',
+          stocks: '45%',
+          crypto: '35%',
+          etfs: '20%',
+        },
+        analysisNote: dashData.analysisNote ?? 0,
+        analysisSummary: dashData.analysisSummary || '',
+
+        totalBills,
+        paidBills,
+        unpaidBills,
+        overdueBills,
+        totalSpent,
+
+        upcomingBills: dashData.upcomingBills || [],
+        recentTransactions: dashData.recentTransactions || [],
+        paymentMethods: dashData.paymentMethods || [],
+        preferences: dashData.preferences || {},
+        investments: Array.isArray(dashData.investments) ? dashData.investments : [],
+
+        // Raw bills — Card.tsx filters this locally for the unpaid-bills modal
+        bills,
       },
     });
   } catch (error) {
     if (error instanceof ApiError) {
       return jsonError(error.message, error.status);
     }
-    console.error('[invest] error:', error);
-    return jsonError('Failed to complete investment', 500);
+    console.error('[dashboard GET] error:', error);
+    return jsonError('Server error, please contact support by mail', 500);
   }
 }

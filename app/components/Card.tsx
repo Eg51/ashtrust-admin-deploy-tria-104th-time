@@ -710,9 +710,13 @@ export default function CardsPage() {
         if (result.success && result.data) {
           const data = result.data;
           const rawBills = data.bills || [];
+          // const pending = rawBills.filter((b: any) => {
+          //   const status = (b.status || '').trim().toLowerCase();
+          //   return status === 'pending' || status === 'unpaid';
+          // });
           const pending = rawBills.filter((b: any) => {
             const status = (b.status || '').trim().toLowerCase();
-            return status === 'pending' || status === 'unpaid';
+            return status === 'pending' || status === 'unpaid' || status === 'overdue';
           });
           setPendingBills(pending);
         }
