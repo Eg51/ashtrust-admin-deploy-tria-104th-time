@@ -59,6 +59,24 @@ const formatCurrency = (value: string | number | undefined): string => {
   return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
+// Countdown until a bill is due — hours and minutes only.
+//   past due -> "Overdue"
+//   else     -> "Xh Ym"
+const formatDueIn = (dueDate?: string | Date): string => {
+  if (!dueDate) return "No due date";
+  const target = new Date(dueDate).getTime();
+  if (isNaN(target)) return "No due date";
+
+  const diffMs = target - Date.now();
+  if (diffMs <= 0) return "Overdue";
+
+  const totalMinutes = Math.floor(diffMs / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  return `${hours}h ${minutes}m`;
+};
+
 interface Transaction { id: string; merchant: string; type: string; category: string; date: string; status: "completed" | "pending" | "failed"; amount: string; isNegative: boolean; icon?: React.ReactNode; }
 interface UpcomingBill { id: string; name: string; dueIn: string; amount: string; category: string; }
 interface QuickContact { id: string; name: string; avatar: string; initials: string; }
@@ -74,11 +92,9 @@ const defaultTransactions: Transaction[] = [
 ];
 const defaultUpcomingBills: UpcomingBill[] = [];
 const defaultRecentBills: UpcomingBill[] = [];
-// const defaultUpcomingBills: UpcomingBill[] = [ { id: "1", name: "", dueIn: "", amount: "", category: "" }, { id: "2", name: "", dueIn: "", amount: "", category: "" } ];
-// const defaultRecentBills: UpcomingBill[] = [ { id: "1", name: "", dueIn: "", amount: "", category: "" }, { id: "2", name: "", dueIn: "", amount: "", category: "" }, { id: "3", name: "", dueIn: "", amount: "", category: "" } ];
 
 const defaultQuickContacts: QuickContact[] = [ { id: "1", name: "James", avatar: "", initials: "JD" }, { id: "2", name: "Libs", avatar: "", initials: "LM" }, { id: "3", name: "Sarah", avatar: "", initials: "SK" }, { id: "4", name: "Mike", avatar: "", initials: "MR" } ];
-const defaultSpendingCategories = [ { name: "Stocks", percentage: 45, color: "from-blue-400 to-cyan-500" }, { name: "Crypto", percentage: 35, color: "from-purple-400 to-pink-500" }, { name: "ETFs", percentage: 20, color: "from-emerald-400 to-teal-500" } ];
+const defaultSpendingCategories = [ { name: "Stocks", percentage: 0, color: "from-blue-400 to-cyan-500" }, { name: "Crypto", percentage: 0, color: "from-purple-400 to-pink-500" }, { name: "ETFs", percentage: 0, color: "from-emerald-400 to-teal-500" } ];
 
 const getFixedHistoricalData = (basePrice: number, points: number = 20): number[] => {
   const data: number[] = [];
@@ -194,14 +210,27 @@ const UpcomingBillItem = memo(({ bill, index }: { bill: UpcomingBill; index: num
   const billGradients = [ "from-amber-400/20 via-yellow-400/10 to-orange-400/20", "from-blue-400/20 via-cyan-400/10 to-sky-400/20", "from-purple-400/20 via-indigo-400/10 to-violet-400/20", ];
   const gradientIndex = index % billGradients.length;
   const gradientClass = billGradients[gradientIndex];
+  const isOverdue = bill.dueIn === "Overdue";
 
   return (
     <motion.div custom={index} variants={itemVariants} initial="hidden" animate="visible" whileHover={{ scale: 1.02, boxShadow: "0 10px 30px rgba(0,0,0,0.08)" }} className={`flex items-center justify-between rounded-lg bg-gradient-to-br ${gradientClass} p-3 backdrop-blur-sm border-none cursor-pointer hover:shadow-xl transition-all duration-300`}>
       <div className="flex items-center gap-3">
-        <div className="rounded-lg bg-amber-500/30 p-2 shadow-sm"><Calendar size={16} className="text-amber-600" /></div>
-        <div><p className="text-sm font-medium text-cyan-900">{bill.name}</p><div className="flex items-center gap-2"><Clock size={12} className="text-cyan-700/50" /><span className="text-xs text-cyan-700/60">Due in {bill.dueIn}</span></div></div>
+        <div className={`rounded-lg p-2 shadow-sm ${isOverdue ? "bg-red-500/30" : "bg-amber-500/30"}`}>
+          <Calendar size={16} className={isOverdue ? "text-red-600" : "text-amber-600"} />
+        </div>
+        <div>
+          <p className="text-sm font-medium text-cyan-900">{bill.name}</p>
+          <div className="flex items-center gap-2">
+            <Clock size={12} className={isOverdue ? "text-red-500" : "text-cyan-700/50"} />
+            {isOverdue ? (
+              <span className="text-xs font-semibold text-red-600">Overdue</span>
+            ) : (
+              <span className="text-xs text-cyan-700/60">Due in {bill.dueIn}</span>
+            )}
+          </div>
+        </div>
       </div>
-      <span className="text-sm font-semibold text-cyan-900">${formatCurrency(bill.amount)}</span>
+      <span className={`text-sm font-semibold ${isOverdue ? "text-red-600" : "text-cyan-900"}`}>${formatCurrency(bill.amount)}</span>
     </motion.div>
   );
 });
@@ -419,7 +448,16 @@ export default function Dash() {
         const rawBills = userData.bills || [];
         const rawTransactions = userData.recentTransactions || [];
 
-        const formattedUpcomingBills = rawBills.filter((b: any) => { const status = (b.status || '').trim().toLowerCase(); return status === 'pending' || status === 'unpaid' || status === 'overdue'; }).map((b: any) => { let dueInText = "Unknown"; if (b.dueDate) { const daysLeft = Math.ceil((new Date(b.dueDate).getTime() - Date.now()) / (1000 * 3600 * 24)); dueInText = daysLeft <= 0 ? "Overdue" : `${daysLeft} days`; } return { id: b.id || Date.now().toString(), name: b.name || b.title || "Unnamed Bill", dueIn: dueInText, amount: typeof b.amount === 'number' ? `${b.amount.toFixed(2)}` : b.amount || "0.00", category: b.category || "General" }; });
+        const formattedUpcomingBills = rawBills
+          .filter((b: any) => { const status = (b.status || '').trim().toLowerCase(); return status === 'pending' || status === 'unpaid' || status === 'overdue'; })
+          .map((b: any) => ({
+            id: b.id || Date.now().toString(),
+            name: b.name || b.title || "Unnamed Bill",
+            dueIn: formatDueIn(b.dueDate),
+            amount: typeof b.amount === 'number' ? `${b.amount.toFixed(2)}` : b.amount || "0.00",
+            category: b.category || "General"
+          }));
+
         const formattedRecentBills = rawBills.filter((b: any) => { const status = (b.status || '').trim().toLowerCase(); return status === 'paid'; }).map((b: any) => ({ id: b.id || Date.now().toString(), name: b.name || b.title || "Unnamed Bill", dueIn: "Paid", amount: typeof b.amount === 'number' ? `${b.amount.toFixed(2)}` : b.amount || "0.00", category: b.category || "General" }));
 
         const portfolioAmount = parseFloat(userData.totalBalance?.amount) || 0;
@@ -435,7 +473,7 @@ export default function Dash() {
           portfolioValue: portfolioValueStr, portfolioChange: portfolioChange, assetTotal: assetTotalStr,
           transactions: rawTransactions.map((t: any) => ({ id: t.id || Date.now().toString(), merchant: t.merchant || "Unknown", type: t.type || "Purchase", category: t.category || "General", date: t.date || new Date().toLocaleDateString(), status: t.status || "completed", amount: typeof t.amount === 'number' ? `${t.amount.toFixed(2)}` : t.amount || "0.00", isNegative: t.isNegative ?? true, })),
           upcomingBills: formattedUpcomingBills, quickContacts: defaultQuickContacts,
-          spendingCategories: [ { name: "Stocks", percentage: parseInt(userData.analysisBalance?.stocks) || 45, color: "from-blue-400 to-cyan-500" }, { name: "Crypto", percentage: parseInt(userData.analysisBalance?.crypto) || 35, color: "from-purple-400 to-pink-500" }, { name: "ETFs", percentage: parseInt(userData.analysisBalance?.etfs) || 20, color: "from-emerald-400 to-teal-500" } ],
+          spendingCategories: [ { name: "Stocks", percentage: parseInt(userData.analysisBalance?.stocks) || 0, color: "from-blue-400 to-cyan-500" }, { name: "Crypto", percentage: parseInt(userData.analysisBalance?.crypto) || 0, color: "from-purple-400 to-pink-500" }, { name: "ETFs", percentage: parseInt(userData.analysisBalance?.etfs) || 0, color: "from-emerald-400 to-teal-500" } ],
           watchlist: [], investments: userData.investments || [], recentBills: formattedRecentBills, totalBalance: userData.totalBalance, analysisBalance: userData.analysisBalance, analysisNote: analysisNoteValue, analysisSummary: userData.analysisSummary || "", paymentMethods: userData.paymentMethods || [], preferences: userData.preferences || {},
         });
       }
@@ -444,7 +482,7 @@ export default function Dash() {
 
   const saveDashboardData = async (userId: string, data: UserDashboardData) => {
     try {
-      const preparedData = { totalBalance: { amount: data.portfolioValue, change: data.portfolioChange }, analysisBalance: { total: data.portfolioValue, stocks: data.spendingCategories[0]?.percentage + "%" || "45%", crypto: data.spendingCategories[1]?.percentage + "%" || "35%", etfs: data.spendingCategories[2]?.percentage + "%" || "20%" }, analysisNote: parseFloat(data.assetTotal.replace(/[^0-9.]/g, "")) || 0, analysisSummary: data.analysisSummary || "", bills: data.recentBills.map(b => ({ ...b, status: 'paid' })), recentTransactions: data.transactions, upcomingBills: data.upcomingBills, paymentMethods: data.paymentMethods || [], preferences: data.preferences || {} };
+      const preparedData = { totalBalance: { amount: data.portfolioValue, change: data.portfolioChange }, analysisBalance: { total: data.portfolioValue, stocks: data.spendingCategories[0]?.percentage + "%" || "0%", crypto: data.spendingCategories[1]?.percentage + "%" || "0%", etfs: data.spendingCategories[2]?.percentage + "%" || "0%" }, analysisNote: parseFloat(data.assetTotal.replace(/[^0-9.]/g, "")) || 0, analysisSummary: data.analysisSummary || "", bills: data.recentBills.map(b => ({ ...b, status: 'paid' })), recentTransactions: data.transactions, upcomingBills: data.upcomingBills, paymentMethods: data.paymentMethods || [], preferences: data.preferences || {} };
       const response = await fetch('/api/user/dashboard', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId, dashboardData: preparedData }) });
       if (!response.ok) { throw new Error('Failed to save dashboard data'); }
     } catch (error) { console.error("Error saving dashboard:", error); }
@@ -523,8 +561,8 @@ export default function Dash() {
             <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={refreshDashboard} disabled={isRefreshing} className="flex items-center gap-1 rounded-lg bg-white/30 px-3 py-1.5 text-xs font-medium text-cyan-700 shadow-md hover:shadow-lg transition-all hover:bg-white/50 disabled:opacity-50"><RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />{isRefreshing ? 'Refreshing...' : 'Refresh'}</motion.button>
             {refreshMessage && (<span className="text-xs text-emerald-600">{refreshMessage}</span>)}
 
-            <ManageAccountButton 
-              variant="outline" 
+            <ManageAccountButton
+              variant="outline"
               size="sm"
               className="flex-shrink-0"
             >
@@ -547,26 +585,26 @@ export default function Dash() {
             <div className="mt-3 flex items-end justify-between"><div><p className="text-2xl font-bold text-cyan-900"><span className="text-md text-amber-400 sm:text-2xl font-normal">$</span>{formatCurrency(dashboardData.assetTotal)}</p><p className="text-xs text-cyan-700">Total</p></div><div className={`flex items-center font-bold gap-1 text-sm ${dashboardData.portfolioChange.startsWith('+') ? 'text-emerald-600' : 'text-red-600'}`}>{dashboardData.portfolioChange.startsWith('+') ? <ArrowUpRight size={16} /> : <ArrowDownRight size={16} />}<span className="font-medium">{dashboardData.portfolioChange}</span></div></div>
             <div className="mt-4 space-y-2.5">{dashboardData.spendingCategories.map((category, index) => (<motion.div key={category.name} custom={4 + index} variants={itemVariants} initial="hidden" animate="visible"><div className="flex items-center justify-between text-xs"><span className="text-cyan-800">{category.name}</span><span className="font-medium text-cyan-800">{category.percentage}%</span></div><div className="mt-0.5 h-1.5 w-full overflow-hidden cursor-pointer rounded-full bg-cyan-200/50"><motion.div initial={{ width: 0 }} animate={{ width: `${category.percentage}%` }} transition={{ duration: 0.8, delay: 0.3 + index * 0.08, ease: "easeOut" as const }} className={`h-full rounded-full hover:shadow-xl bg-gradient-to-r ${category.color}`} /></div></motion.div>))}{dashboardData.analysisSummary && (<div className="mt-2 text-xs text-cyan-700 font-medium bg-white/30 p-2 rounded-lg">{dashboardData.analysisSummary}</div>)}</div>
           </motion.div>
-
-          <motion.div custom={4} variants={cardVariants} whileHover={{ scale: 1.02, boxShadow: "0 20px 50px rgba(0,0,0,0.08)" }} whileTap={{ scale: 0.98 }} className="rounded-2xl border-none shadow-xl bg-gradient-to-br from-[#C4F8FD] via-[#B5F0F8] to-[#A5E8F2] p-5 backdrop-blur-sm hover:shadow-2xl transition-all duration-300">
-            <div className="flex items-center justify-between"><h2 className="text-sm font-semibold text-slate-600">Upcoming Bills</h2><Link href={"/Bills"}><motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="text-xs text-cyan-600 hover:text-cyan-800 font-medium">View All</motion.button></Link></div>
-            <UpcomingBillsSection bills={dashboardData.upcomingBills} />
-          </motion.div>
+          {dashboardData.upcomingBills.length > 0 && (
+            <motion.div custom={4} variants={cardVariants} whileHover={{ scale: 1.02, boxShadow: "0 20px 50px rgba(0,0,0,0.08)" }} whileTap={{ scale: 0.98 }} className="rounded-2xl border-none shadow-xl bg-gradient-to-br from-[#C4F8FD] via-[#B5F0F8] to-[#A5E8F2] p-5 backdrop-blur-sm hover:shadow-2xl transition-all duration-300">
+              <div className="flex items-center justify-between"><h2 className="text-sm font-semibold text-slate-600">Upcoming Bills</h2><Link href={"/Bills"}><motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="text-xs text-cyan-600 hover:text-cyan-800 font-medium">View All</motion.button></Link></div>
+              <UpcomingBillsSection bills={dashboardData.upcomingBills} />
+            </motion.div>
+          )}
         </div>
 
-        <motion.div custom={5} variants={cardVariants} whileHover={{ scale: 1.01, boxShadow: "0 20px 50px rgba(0,0,0,0.06)" }} whileTap={{ scale: 0.99 }} className="mt-4 rounded-2xl border-none bg-gradient-to-br from-[#C4F8FD] via-[#B0F0F8] to-[#9AE8F2] shadow-xl p-5 hover:shadow-2xl transition-all duration-300">
-          <div className="flex items-center text-cyan-700 justify-between"><h2 className="text-sm font-semibold text-slate-600">Recent Bills</h2></div>
-          <RecentBillsSection bills={dashboardData.recentBills} />
-        </motion.div>
+        {dashboardData.recentBills.length > 0 && (
+          <motion.div custom={5} variants={cardVariants} whileHover={{ scale: 1.01, boxShadow: "0 20px 50px rgba(0,0,0,0.06)" }} whileTap={{ scale: 0.99 }} className="mt-4 rounded-2xl border-none bg-gradient-to-br from-[#C4F8FD] via-[#B0F0F8] to-[#9AE8F2] shadow-xl p-5 hover:shadow-2xl transition-all duration-300">
+            <div className="flex items-center text-cyan-700 justify-between"><h2 className="text-sm font-semibold text-slate-600">Recent Bills</h2></div>
+            <RecentBillsSection bills={dashboardData.recentBills} />
+          </motion.div>
+        )}
 
         <AffiliatePaymentModal isOpen={showAffiliateModal} onClose={() => setShowAffiliateModal(false)} />
       </motion.div>
     </div>
   );
 }
-
-
-
 
 
 
