@@ -43,3 +43,11 @@ next-env.d.ts
 .env.production
 _session-notes.md.env.local
 dump/
+dump/
+app/components/ChatWidgett.old.tsx
+app/components/ChatWidgett.tsx.mixed.bak
+app/components/ChatWidgett.tsx.bak
+dump/
+app/components/ChatWidgett.old.tsx
+app/components/ChatWidgett.tsx.mixed.bak
+app/components/ChatWidgett.tsx.bak
