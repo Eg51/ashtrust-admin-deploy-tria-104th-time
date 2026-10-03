@@ -72,8 +72,11 @@ const defaultTransactions: Transaction[] = [
   { id: "1", merchant: "", type: "", category: "", date: new Date().toLocaleDateString(), status: "completed", amount: "", isNegative: true, icon: <Smartphone size={16} /> },
   { id: "2", merchant: "", type: "", category: "", date: new Date().toLocaleDateString(), status: "completed", amount: "", isNegative: false, icon: <TrendingUp size={16} /> },
 ];
-const defaultUpcomingBills: UpcomingBill[] = [ { id: "1", name: "", dueIn: "", amount: "", category: "" }, { id: "2", name: "", dueIn: "", amount: "", category: "" } ];
-const defaultRecentBills: UpcomingBill[] = [ { id: "1", name: "", dueIn: "", amount: "", category: "" }, { id: "2", name: "", dueIn: "", amount: "", category: "" }, { id: "3", name: "", dueIn: "", amount: "", category: "" } ];
+const defaultUpcomingBills: UpcomingBill[] = [];
+const defaultRecentBills: UpcomingBill[] = [];
+// const defaultUpcomingBills: UpcomingBill[] = [ { id: "1", name: "", dueIn: "", amount: "", category: "" }, { id: "2", name: "", dueIn: "", amount: "", category: "" } ];
+// const defaultRecentBills: UpcomingBill[] = [ { id: "1", name: "", dueIn: "", amount: "", category: "" }, { id: "2", name: "", dueIn: "", amount: "", category: "" }, { id: "3", name: "", dueIn: "", amount: "", category: "" } ];
+
 const defaultQuickContacts: QuickContact[] = [ { id: "1", name: "James", avatar: "", initials: "JD" }, { id: "2", name: "Libs", avatar: "", initials: "LM" }, { id: "3", name: "Sarah", avatar: "", initials: "SK" }, { id: "4", name: "Mike", avatar: "", initials: "MR" } ];
 const defaultSpendingCategories = [ { name: "Stocks", percentage: 45, color: "from-blue-400 to-cyan-500" }, { name: "Crypto", percentage: 35, color: "from-purple-400 to-pink-500" }, { name: "ETFs", percentage: 20, color: "from-emerald-400 to-teal-500" } ];
 
