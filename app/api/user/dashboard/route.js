@@ -272,6 +272,86 @@
 //   the "unpaid bills" modal.
 // - Returns `investments` so Dash.tsx can compute the Assets card total.
 
+// import {
+//   requireAuth,
+//   jsonOk,
+//   jsonError,
+//   ApiError,
+// } from '@/lib/api-helpers';
+// import { getDashDataCollection } from '@/lib/mongodb';
+
+// export const runtime = 'nodejs';
+
+// export async function GET(request) {
+//   try {
+//     const { userId } = await requireAuth(request);
+
+//     const dashCollection = await getDashDataCollection();
+//     const dashData = await dashCollection.findOne({ userId });
+
+//     if (!dashData) {
+//       throw new ApiError('Dashboard data not found', 404);
+//     }
+
+//     const bills = Array.isArray(dashData.bills) ? dashData.bills : [];
+
+//     const totalBills = bills.length;
+//     const paidBills = bills.filter((b) => b.status === 'paid').length;
+//     const unpaidBills = bills.filter((b) => b.status === 'unpaid').length;
+//     const overdueBills = bills.filter((b) => b.status === 'overdue').length;
+
+//     const totalSpent = bills
+//       .filter((b) => b.status === 'paid')
+//       .reduce((sum, b) => sum + (Number(b.amount) || 0), 0);
+
+//     return jsonOk({
+//       data: {
+//         totalBalance: dashData.totalBalance || { amount: '0.00', change: '0.0%' },
+//         analysisBalance: dashData.analysisBalance || {
+//           total: '0.00',
+//           stocks: '45%',
+//           crypto: '35%',
+//           etfs: '20%',
+//         },
+//         analysisNote: dashData.analysisNote ?? 0,
+//         analysisSummary: dashData.analysisSummary || '',
+
+//         totalBills,
+//         paidBills,
+//         unpaidBills,
+//         overdueBills,
+//         totalSpent,
+
+//         upcomingBills: dashData.upcomingBills || [],
+//         recentTransactions: dashData.recentTransactions || [],
+//         paymentMethods: dashData.paymentMethods || [],
+//         preferences: dashData.preferences || {},
+//         investments: Array.isArray(dashData.investments) ? dashData.investments : [],
+
+//         // Raw bills — Card.tsx filters this locally for the unpaid-bills modal
+//         bills,
+//       },
+//     });
+//   } catch (error) {
+//     if (error instanceof ApiError) {
+//       return jsonError(error.message, error.status);
+//     }
+//     console.error('[dashboard GET] error:', error);
+//     return jsonError('Server error, please contact support by mail', 500);
+//   }
+// }
+
+// app/api/user/dashboard/route.js
+//
+// GET — return the user's dashboard data.
+// - Requires auth (requireAuth returns { userId, user } with no extra DB round trip)
+// - Reads the user's dashdata document
+// - Computes bill stats (total, paid, unpaid, overdue) so the client can
+//   gate withdrawals on unpaidBills without doing the math itself.
+// - Returns the raw `bills` array too — Card.tsx filters it locally for
+//   the "unpaid bills" modal.
+// - Returns `investments` so Dash.tsx can compute the Assets card total.
+
 import {
   requireAuth,
   jsonOk,

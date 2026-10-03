@@ -19,6 +19,9 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import WithdrawalReceiptModal from '@/app/components/WithdrawalReceiptModal';
+import WithdrawBlockedModal, { type BlockType } from '@/app/components/WithdrawBlockedModal';
+import TransactionPinModal, { type PinMode } from '@/app/components/TransactionPinModal';
+import { setTransactionPin, getPinStatus } from '@/app/actions/pin';
 
 // ============================================================================
 // CURRENCY FORMATTING HELPER
@@ -38,40 +41,24 @@ const formatCurrency = (value: string | number): string => {
 // SAFE RANDOM GENERATORS
 // ============================================================================
 
-/**
- * Generate a cryptographically secure random string
- * ✅ Safe for React/Next.js - uses crypto.getRandomValues()
- */
 const generateSecureRandom = (length: number = 8): string => {
   const array = new Uint8Array(length);
   crypto.getRandomValues(array);
   return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
 };
 
-/**
- * Generate a unique ID with timestamp + secure random
- * ✅ Safe - combines timestamp with crypto random
- */
 const generateUniqueId = (prefix: string = ''): string => {
   const timestamp = Date.now().toString(36);
   const random = generateSecureRandom(6);
   return `${prefix}${timestamp}_${random}`;
 };
 
-/**
- * Generate a withdrawal reference
- * ✅ Safe - uses crypto random + timestamp
- */
 const generateWithdrawalReference = (): string => {
   const timestamp = Date.now().toString().slice(-6);
   const random = generateSecureRandom(4);
   return `AshTrust REF:${timestamp}${random.toUpperCase()}`;
 };
 
-/**
- * Generate a random 16-digit card number
- * ✅ Safe - uses crypto random for each digit
- */
 const generateRandomCardNumber = (): string => {
   let num = '';
   for (let i = 0; i < 16; i++) {
@@ -163,7 +150,7 @@ const itemVariants = {
 };
 
 // ============================================================================
-// CARD DISPLAY WITH EYE TOGGLE AND AUTO‑ROTATING NUMBER
+// CARD DISPLAY
 // ============================================================================
 
 interface CardDisplayProps {
@@ -228,7 +215,6 @@ const CardDisplay = memo(({
                 onToggleVisibility();
               }}
               className="rounded-full bg-white/20 p-1.5 text-white transition-colors hover:bg-white/30"
-              
             >
               {isNumberVisible ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
@@ -257,7 +243,7 @@ const CardDisplay = memo(({
 CardDisplay.displayName = 'CardDisplay';
 
 // ============================================================================
-// WITHDRAWAL MODAL - UPDATED TO READ FROM DATABASE WITH MULTIPLE ACCOUNTS
+// WITHDRAWAL MODAL
 // ============================================================================
 
 interface WithdrawalModalProps {
@@ -278,10 +264,10 @@ interface WithdrawalModalProps {
   withdrawalAmount?: string;
 }
 
-const WithdrawalModal = ({ 
-  isOpen, 
-  onClose, 
-  onWithdraw, 
+const WithdrawalModal = ({
+  isOpen,
+  onClose,
+  onWithdraw,
   pendingBills,
   userWithdrawalDetails,
   withdrawalAmount = "0.00"
@@ -289,7 +275,6 @@ const WithdrawalModal = ({
   const [paymentMethod, setPaymentMethod] = useState<"bank" | "crypto">("bank");
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
 
-  // ✅ Set default selected account when modal opens
   useEffect(() => {
     if (isOpen && userWithdrawalDetails?.accounts && userWithdrawalDetails.accounts.length > 0) {
       const defaultAcc = userWithdrawalDetails.accounts.find((a: any) => a.isDefault) || userWithdrawalDetails.accounts[0];
@@ -312,7 +297,6 @@ const WithdrawalModal = ({
     accounts: [],
   };
 
-  // ✅ Get the selected account details
   const selectedAccount = userWithdrawalDetails?.accounts?.find(
     (acc: any) => acc.id === selectedAccountId
   ) || userWithdrawalDetails?.accounts?.[0] || {
@@ -322,7 +306,6 @@ const WithdrawalModal = ({
     swiftCode: bankDetails.swiftCode,
   };
 
-  // ✅ Format the amount for display
   const formattedAmount = formatCurrency(withdrawalAmount);
 
   return (
@@ -330,46 +313,51 @@ const WithdrawalModal = ({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 shadow-xl p-4 backdrop-blur-md"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-md"
       onClick={onClose}
     >
       <motion.div
         initial={{ scale: 0.9, y: 20 }}
         animate={{ scale: 1, y: 0 }}
         exit={{ scale: 0.9, y: 20 }}
-        className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-black/60 p-6 shadow-2xl border border-white/10"
+        className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-[#C4F8FD] p-6 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Header */}
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            <AlertTriangle size={20} className="text-amber-400" />
+          <h2 className="text-xl font-bold text-cyan-900 flex items-center gap-2">
+            <AlertTriangle size={20} className="text-amber-600" />
             {allPaid ? "Withdrawal Details" : "Unpaid Bills"}
           </h2>
-          <button onClick={onClose} className="rounded-lg p-1 hover:bg-white/10 transition-colors">
-            <X size={20} className="text-slate-400" />
+          <button
+            onClick={onClose}
+            className="rounded-lg p-1 text-cyan-700 hover:bg-white/40 transition-colors"
+            aria-label="Close"
+          >
+            <X size={20} />
           </button>
         </div>
 
         {!allPaid ? (
           <>
-            <div className="rounded-xl bg-amber-500/20 p-4 mb-4 border border-amber-500/30">
-              <p className="text-sm text-amber-300 flex items-start gap-2">
-                <span className="text-amber-400 mt-0.5">⚠️</span>
-                <span>You have <strong className="text-white">{pendingBills.length}</strong> unpaid bill(s). Please clear these bills before requesting for a withdrawal</span>
+            <div className="rounded-xl bg-amber-500/20 p-4 mb-4 border border-amber-500/40">
+              <p className="text-sm text-amber-900 flex items-start gap-2">
+                <span className="text-amber-700 mt-0.5">⚠️</span>
+                <span>You have <strong className="text-cyan-900">{pendingBills.length}</strong> unpaid bill(s). Please clear these bills before requesting for a withdrawal</span>
               </p>
             </div>
 
             <div className="space-y-3 mb-4">
               {pendingBills.map((bill) => (
-                <div key={bill.id} className="flex items-center justify-between rounded-lg bg-slate-800/50 p-3 border border-slate-700">
+                <div key={bill.id} className="flex items-center justify-between rounded-lg bg-white/50 p-3 border border-cyan-200/40">
                   <div>
-                    <p className="text-sm font-medium text-white">{bill.name || bill.title || "Unnamed Bill"}</p>
-                    <div className="flex items-center gap-2 text-xs text-slate-400">
+                    <p className="text-sm font-medium text-cyan-900">{bill.name || bill.title || "Unnamed Bill"}</p>
+                    <div className="flex items-center gap-2 text-xs text-cyan-700">
                       <Calendar size={12} />
                       <span>Due: {bill.dueDate ? new Date(bill.dueDate).toLocaleDateString() : "N/A"}</span>
                     </div>
                   </div>
-                  <span className="text-sm font-semibold text-amber-400">
+                  <span className="text-sm font-semibold text-amber-700">
                     ${typeof bill.amount === 'number' ? bill.amount.toFixed(2) : bill.amount || "0.00"}
                   </span>
                 </div>
@@ -389,24 +377,25 @@ const WithdrawalModal = ({
             </Link>
           </>
         ) : (
-          <> 
-            <div className="rounded-xl bg-amber-500/20 p-4 mb-4 border border-amber-500/30">
-              <p className="text-sm text-center text-amber-300 flex items-start gap-2">
-                <span>Enter your withdrawal details and click withdraw to confirm </span>
+          <>
+            <div className="rounded-xl bg-amber-500/20 p-4 mb-4 border border-amber-500/40">
+              <p className="text-sm text-center text-amber-900">
+                Enter your withdrawal details and click withdraw to confirm
               </p>
             </div>
 
             <div className="space-y-4">
-              {/* ✅ Display Amount (from user input) */}
+              {/* Amount (read-only display) */}
               <div>
-                <label className="text-sm font-medium text-slate-300 block mb-1">Amount</label>
-                <div className="rounded-lg border border-slate-700 bg-slate-800/50 px-4 py-3 text-white select-none">
-                  <span className="text-lg font-bold text-amber-400">${formattedAmount}</span>
+                <label className="text-sm font-medium text-cyan-700 block mb-1">Amount</label>
+                <div className="rounded-lg border border-cyan-200/50 bg-white/50 px-4 py-3 text-cyan-900 select-none">
+                  <span className="text-lg font-bold text-amber-600">${formattedAmount}</span>
                 </div>
               </div>
 
+              {/* Payment method */}
               <div>
-                <label className="text-sm font-medium text-slate-300 block mb-1">Payment Method</label>
+                <label className="text-sm font-medium text-cyan-700 block mb-1">Payment Method</label>
                 <div className="flex gap-2">
                   <button
                     type="button"
@@ -414,7 +403,7 @@ const WithdrawalModal = ({
                     className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
                       paymentMethod === "bank"
                         ? "bg-cyan-500 text-white shadow-lg shadow-cyan-500/30"
-                        : "bg-slate-800 text-slate-400 hover:bg-slate-700"
+                        : "bg-white/50 text-cyan-700 hover:bg-white/70"
                     }`}
                   >
                     <Banknote size={16} className="inline mr-2" /> Bank
@@ -425,7 +414,7 @@ const WithdrawalModal = ({
                     className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
                       paymentMethod === "crypto"
                         ? "bg-cyan-500 text-white shadow-lg shadow-cyan-500/30"
-                        : "bg-slate-800 text-slate-400 hover:bg-slate-700"
+                        : "bg-white/50 text-cyan-700 hover:bg-white/70"
                     }`}
                   >
                     <Wallet size={16} className="inline mr-2" /> Crypto
@@ -435,54 +424,51 @@ const WithdrawalModal = ({
 
               {paymentMethod === "bank" ? (
                 <>
-                  {/* ✅ Account Selector Dropdown */}
                   {userWithdrawalDetails?.accounts && userWithdrawalDetails.accounts.length > 0 ? (
                     <div>
-                      <label className="text-sm font-medium text-slate-300 block mb-1">Select Account</label>
+                      <label className="text-sm font-medium text-cyan-700 block mb-1">Select Account</label>
                       <select
                         value={selectedAccountId}
                         onChange={(e) => setSelectedAccountId(e.target.value)}
-                        className="w-full rounded-lg border border-slate-700 bg-slate-800/50 px-4 py-3 text-white focus:border-cyan-500 focus:outline-none"
+                        className="w-full rounded-lg border border-cyan-200/50 bg-white/50 px-4 py-3 text-cyan-900 focus:border-cyan-500 focus:outline-none"
                       >
                         {userWithdrawalDetails.accounts.map((acc: any) => (
-                          <option key={acc.id} value={acc.id} className="bg-slate-800">
+                          <option key={acc.id} value={acc.id} className="bg-white text-cyan-900">
                             {acc.bankName} - {acc.accountNumber} {acc.isDefault ? '(Default)' : ''}
                           </option>
                         ))}
                       </select>
                     </div>
                   ) : (
-                    // Fallback if no accounts are set up
-                    <div className="rounded-lg bg-amber-500/20 p-3 border border-amber-500/30">
-                      <p className="text-sm text-amber-300">No bank accounts set up. Please go to Settings to add your bank details.</p>
+                    <div className="rounded-lg bg-amber-500/20 p-3 border border-amber-500/40">
+                      <p className="text-sm text-amber-900">No bank accounts set up. Please go to Settings to add your bank details.</p>
                     </div>
                   )}
 
-                  {/* ✅ Display selected account details */}
                   {selectedAccount && (
                     <>
                       <div>
-                        <label className="text-sm font-medium text-slate-300 block mb-1">Bank Name</label>
-                        <div className="rounded-lg border border-slate-700 bg-slate-800/50 px-4 py-3 text-white select-none">
+                        <label className="text-sm font-medium text-cyan-700 block mb-1">Bank Name</label>
+                        <div className="rounded-lg border border-cyan-200/50 bg-white/50 px-4 py-3 text-cyan-900 select-none">
                           {selectedAccount.bankName || bankDetails.bankName}
                         </div>
                       </div>
                       <div>
-                        <label className="text-sm font-medium text-slate-300 block mb-1">Account Name</label>
-                        <div className="rounded-lg border border-slate-700 bg-slate-800/50 px-4 py-3 text-white select-none">
+                        <label className="text-sm font-medium text-cyan-700 block mb-1">Account Name</label>
+                        <div className="rounded-lg border border-cyan-200/50 bg-white/50 px-4 py-3 text-cyan-900 select-none">
                           {selectedAccount.accountName || bankDetails.accountName}
                         </div>
                       </div>
                       <div>
-                        <label className="text-sm font-medium text-slate-300 block mb-1">Account Number</label>
-                        <div className="rounded-lg border border-slate-700 bg-slate-800/50 px-4 py-3 text-white select-none">
+                        <label className="text-sm font-medium text-cyan-700 block mb-1">Account Number</label>
+                        <div className="rounded-lg border border-cyan-200/50 bg-white/50 px-4 py-3 text-cyan-900 select-none">
                           {selectedAccount.accountNumber || bankDetails.accountNumber}
                         </div>
                       </div>
                       {selectedAccount.swiftCode && selectedAccount.swiftCode !== "Not Set" && (
                         <div>
-                          <label className="text-sm font-medium text-slate-300 block mb-1">SWIFT Code</label>
-                          <div className="rounded-lg border border-slate-700 bg-slate-800/50 px-4 py-3 text-white select-none">
+                          <label className="text-sm font-medium text-cyan-700 block mb-1">SWIFT Code</label>
+                          <div className="rounded-lg border border-cyan-200/50 bg-white/50 px-4 py-3 text-cyan-900 select-none">
                             {selectedAccount.swiftCode}
                           </div>
                         </div>
@@ -491,17 +477,16 @@ const WithdrawalModal = ({
                   )}
                 </>
               ) : (
-                // ✅ Crypto Section (unchanged)
                 <>
                   <div>
-                    <label className="text-sm font-medium text-slate-300 block mb-1">Wallet Address</label>
-                    <div className="rounded-lg border border-slate-700 bg-slate-800/50 px-4 py-3 text-white select-none break-all">
+                    <label className="text-sm font-medium text-cyan-700 block mb-1">Wallet Address</label>
+                    <div className="rounded-lg border border-cyan-200/50 bg-white/50 px-4 py-3 text-cyan-900 select-none break-all">
                       {bankDetails.walletAddress}
                     </div>
                   </div>
                   <div>
-                    <label className="text-sm font-medium text-slate-300 block mb-1">Network</label>
-                    <div className="rounded-lg border border-slate-700 bg-slate-800/50 px-4 py-3 text-white select-none">
+                    <label className="text-sm font-medium text-cyan-700 block mb-1">Network</label>
+                    <div className="rounded-lg border border-cyan-200/50 bg-white/50 px-4 py-3 text-cyan-900 select-none">
                       {bankDetails.network}
                     </div>
                   </div>
@@ -525,19 +510,18 @@ const WithdrawalModal = ({
     </motion.div>
   );
 };
-
 // ============================================================================
 // LOADING SKELETON
 // ============================================================================
 
 const LoadingSkeleton = () => (
   <div className="min-h-screen bg-gradient-to-br from-blue-200 via-cyan-100 to-gray-300 p-4 sm:p-6 lg:p-8">
-        <div className="mx-auto max-w-6xl space-y-4">
-          <div className="h-20 animate-pulse rounded-xl shadow-xl bg-[#C4F8FD]" />
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3"><div className="h-64 animate-pulse rounded-xl shadow-xl bg-[#C4F8FD]" /><div className="h-64 animate-pulse rounded-xl shadow-xl bg-[#C4F8FD]" /><div className="h-64 animate-pulse rounded-xl shadow-xl bg-[#C4F8FD]" /></div>
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3"><div className="h-64 animate-pulse rounded-xl shadow-xl bg-[#C4F8FD]" /><div className="h-64 animate-pulse rounded-xl shadow-xl bg-[#C4F8FD]" /><div className="h-64 animate-pulse rounded-xl shadow-xl bg-[#C4F8FD]" /></div>
-        </div>
-      </div>
+    <div className="mx-auto max-w-6xl space-y-4">
+      <div className="h-20 animate-pulse rounded-xl shadow-xl bg-[#C4F8FD]" />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3"><div className="h-64 animate-pulse rounded-xl shadow-xl bg-[#C4F8FD]" /><div className="h-64 animate-pulse rounded-xl shadow-xl bg-[#C4F8FD]" /><div className="h-64 animate-pulse rounded-xl shadow-xl bg-[#C4F8FD]" /></div>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3"><div className="h-64 animate-pulse rounded-xl shadow-xl bg-[#C4F8FD]" /><div className="h-64 animate-pulse rounded-xl shadow-xl bg-[#C4F8FD]" /><div className="h-64 animate-pulse rounded-xl shadow-xl bg-[#C4F8FD]" /></div>
+    </div>
+  </div>
 );
 
 // ============================================================================
@@ -553,7 +537,6 @@ const Dash = lazy(() => import("@/app/components/Dash"));
 export default function CardsPage() {
   const primaryCard = cards[0];
 
-  // ✅ Hydration fix: Only generate card number on client
   const [isMounted, setIsMounted] = useState(false);
   const [isNumberVisible, setIsNumberVisible] = useState(true);
   const [displayNumber, setDisplayNumber] = useState("");
@@ -571,36 +554,48 @@ export default function CardsPage() {
   const [pendingBills, setPendingBills] = useState<Bill[]>([]);
   const [loadingBills, setLoadingBills] = useState(true);
 
+  const [blockedInfo, setBlockedInfo] = useState<{
+    type: BlockType;
+    title?: string;
+    message: string;
+    bills?: Bill[];
+    currentBalance?: number;
+    requestedAmount?: number;
+    actionLabel?: string;
+    actionHref?: string;
+  } | null>(null);
+
+  // ── Phase J: PIN modal state ────────────────────────────────────────
+  const [pinModalOpen, setPinModalOpen] = useState(false);
+  const [pinMode, setPinMode] = useState<PinMode>('enter');
+  const [pinAttemptsLeft, setPinAttemptsLeft] = useState<number | null>(null);
+
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [receiptData, setReceiptData] = useState<any>(null);
-  const [userData, setUserData] = useState<{ 
-    username: string; 
-    email: string; 
-    displayName?: string 
-  }>({ 
-    username: '', 
-    email: '' 
+  const [userData, setUserData] = useState<{
+    username: string;
+    email: string;
+    displayName?: string
+  }>({
+    username: '',
+    email: ''
   });
   const [isSavingWithdrawal, setIsSavingWithdrawal] = useState(false);
   const [userWithdrawalDetails, setUserWithdrawalDetails] = useState<any>(null);
 
-  // ✅ Hydration fix: Generate card number only on client
   useEffect(() => {
     setIsMounted(true);
     setDisplayNumber(generateRandomCardNumber());
   }, []);
 
-  // ✅ Card number rotation with secure random (client only)
   useEffect(() => {
     if (!isMounted) return;
-    
     const interval = setInterval(() => {
       setDisplayNumber(generateRandomCardNumber());
     }, 20000);
     return () => clearInterval(interval);
   }, [isMounted]);
 
-  // ✅ NEW: Fetch user data for receipt
   useEffect(() => {
     const userData = localStorage.getItem('user');
     if (userData) {
@@ -617,33 +612,19 @@ export default function CardsPage() {
     }
   }, []);
 
-  // ✅ NEW: Fetch user's saved withdrawal details from database
   const fetchWithdrawalDetails = async () => {
     try {
       const token = localStorage.getItem('auth_token');
-      console.log('🔵 [fetchWithdrawalDetails] Fetching withdrawal details...');
-      
       const response = await fetch('/api/user/withdrawal', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        headers: { 'Authorization': `Bearer ${token}` }
       });
-      
-      console.log('🔵 [fetchWithdrawalDetails] Response status:', response.status);
-      
       if (response.ok) {
         const result = await response.json();
-        console.log('🔵 [fetchWithdrawalDetails] Result:', result);
-        
         if (result.success && result.data?.details) {
           setUserWithdrawalDetails(result.data.details);
-          console.log('✅ [fetchWithdrawalDetails] Details loaded:', result.data.details);
         } else {
-          console.log('⚠️ [fetchWithdrawalDetails] No details found');
           setUserWithdrawalDetails(null);
         }
-      } else {
-        console.error('❌ [fetchWithdrawalDetails] Failed to fetch:', response.status);
       }
     } catch (error) {
       console.error('❌ Error fetching withdrawal details:', error);
@@ -654,20 +635,14 @@ export default function CardsPage() {
     fetchWithdrawalDetails();
   }, []);
 
-  // ✅ NEW: Auto-fill the input fields when withdrawal details are loaded
   useEffect(() => {
     if (userWithdrawalDetails) {
-      // Auto-fill Bank Name
       if (userWithdrawalDetails.bankName && userWithdrawalDetails.bankName !== "Not Set") {
         setBankName(userWithdrawalDetails.bankName);
       }
-      
-      // Auto-fill Account Name
       if (userWithdrawalDetails.accountName && userWithdrawalDetails.accountName !== "Not Set") {
         setAccountName(userWithdrawalDetails.accountName);
       }
-      
-      // Auto-fill Account Number (use the first account or default)
       if (userWithdrawalDetails.accounts && userWithdrawalDetails.accounts.length > 0) {
         const defaultAcc = userWithdrawalDetails.accounts.find((a: any) => a.isDefault) || userWithdrawalDetails.accounts[0];
         if (defaultAcc) {
@@ -676,20 +651,15 @@ export default function CardsPage() {
       } else if (userWithdrawalDetails.accountNumber && userWithdrawalDetails.accountNumber !== "Not Set") {
         setAccountNumber(userWithdrawalDetails.accountNumber);
       }
-
-      // ✅ Auto-fill Crypto Wallet Address
       if (userWithdrawalDetails.walletAddress && userWithdrawalDetails.walletAddress !== "Not Set") {
         setWalletAddress(userWithdrawalDetails.walletAddress);
       }
-
-      // ✅ Auto-fill Crypto Network
       if (userWithdrawalDetails.network && userWithdrawalDetails.network !== "Not Set") {
         setNetwork(userWithdrawalDetails.network);
       }
     }
   }, [userWithdrawalDetails]);
 
-  // ✅ Fetch dashboard data
   useEffect(() => {
     const fetchDashboard = async () => {
       try {
@@ -710,10 +680,6 @@ export default function CardsPage() {
         if (result.success && result.data) {
           const data = result.data;
           const rawBills = data.bills || [];
-          // const pending = rawBills.filter((b: any) => {
-          //   const status = (b.status || '').trim().toLowerCase();
-          //   return status === 'pending' || status === 'unpaid';
-          // });
           const pending = rawBills.filter((b: any) => {
             const status = (b.status || '').trim().toLowerCase();
             return status === 'pending' || status === 'unpaid' || status === 'overdue';
@@ -729,7 +695,6 @@ export default function CardsPage() {
     fetchDashboard();
   }, []);
 
-  // ✅ Handle amount change with formatting
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value.replace(/,/g, '');
     const num = parseFloat(raw);
@@ -752,15 +717,76 @@ export default function CardsPage() {
     setDisplayAmount(withdrawalAmount);
   };
 
-  // ✅ Updated handleWithdraw with secure ID generation and better logging
-  const handleWithdraw = async (data: any) => {
+  // ── Step 1: Form submitted → check PIN status → open PIN modal ───────
+  const handleFormWithdraw = useCallback(async () => {
+    try {
+      const userDataRaw = localStorage.getItem('user');
+      if (!userDataRaw) {
+        setBlockedInfo({
+          type: 'general',
+          title: 'Session Error',
+          message: 'Could not read your user info. Please log in again.',
+        });
+        return;
+      }
+      const user = JSON.parse(userDataRaw);
+      const userId = user._id || user.id;
+
+      const status = await getPinStatus(userId);
+
+      if (!status.success) {
+        setBlockedInfo({
+          type: 'general',
+          title: 'PIN Check Failed',
+          message: 'Could not check your PIN status. Please try again.',
+        });
+        return;
+      }
+
+      if (status.locked) {
+        setPinMode('locked');
+        setPinAttemptsLeft(null);
+        setPinModalOpen(true);
+        return;
+      }
+
+      if (!status.hasPin) {
+        setPinMode('set');
+        setPinAttemptsLeft(null);
+        setPinModalOpen(true);
+        return;
+      }
+
+      setPinMode('enter');
+      setPinAttemptsLeft(null);
+      setPinModalOpen(true);
+    } catch (err) {
+      console.error('[withdraw] PIN status check failed:', err);
+      setBlockedInfo({
+        type: 'general',
+        title: 'Error',
+        message: 'Something went wrong. Please try again.',
+      });
+    }
+  }, []);
+
+  // ── Step 2: PIN completed → set (if needed) → POST withdrawal ────────
+  const handlePinComplete = useCallback(async (pin: string) => {
     try {
       setIsSavingWithdrawal(true);
 
       const token = localStorage.getItem('auth_token');
-      // console.log('🔵 [Withdraw] Starting withdrawal process...');
-      // console.log('🔵 [Withdraw] Method:', withdrawalMethod);
-      // console.log('🔵 [Withdraw] Amount:', withdrawalAmount);
+      const userDataRaw = localStorage.getItem('user');
+      const user = userDataRaw ? JSON.parse(userDataRaw) : {};
+      const userId = user._id || user.id;
+
+      // If we're in "set" mode, save the PIN first
+      if (pinMode === 'set') {
+        const setResult = await setTransactionPin(userId, pin);
+        if (!setResult.success) {
+          return { success: false, error: setResult.error || 'Failed to save PIN' };
+        }
+      }
 
       const withdrawalPayload = {
         method: withdrawalMethod,
@@ -770,9 +796,8 @@ export default function CardsPage() {
         accountNumber: accountNumber,
         walletAddress: walletAddress,
         network: network,
+        pin,
       };
-
-      // console.log('🔵 [Withdraw] Payload:', withdrawalPayload);
 
       const response = await fetch('/api/user/withdrawal', {
         method: 'POST',
@@ -783,18 +808,97 @@ export default function CardsPage() {
         body: JSON.stringify(withdrawalPayload)
       });
 
-      console.log('🔵 [Withdraw] Response status:', response.status);
-
       const result = await response.json();
-      console.log('🔵 [Withdraw] Response data:', result);
 
       if (!response.ok) {
-        console.error('❌ Failed to save withdrawal:', result);
-        alert(result.error || 'Failed to process withdrawal. Please try again.');
+        const reason = result?.reason;
+
+        // ── PIN errors: keep the PIN modal open, show inline error ──
+        if (reason === 'pin_wrong') {
+          if (result.locked) {
+            setPinMode('locked');
+            setPinAttemptsLeft(null);
+            return { success: false, error: 'PIN locked. Contact support for a reset code.' };
+          }
+          setPinAttemptsLeft(typeof result.remaining === 'number' ? result.remaining : null);
+          return {
+            success: false,
+            error: result.error || 'Incorrect PIN',
+            remaining: result.remaining,
+          };
+        }
+        if (reason === 'pin_locked') {
+          setPinMode('locked');
+          return { success: false, error: 'PIN locked. Contact support for a reset code.' };
+        }
+        if (reason === 'pin_not_set') {
+          setPinMode('set');
+          return { success: false, error: 'Please set a PIN first.' };
+        }
+        if (reason === 'pin_invalid_format') {
+          return { success: false, error: 'PIN must be exactly 4 digits.' };
+        }
+
+        // ── Other errors: close PIN modal + form, show blocked modal ──
+        setPinModalOpen(false);
+        setShowWithdrawalModal(false);
+
+        if (reason === 'unpaid_bills') {
+          try {
+            const billsRes = await fetch(`/api/user/dashboard?userId=${userId}`, {
+              headers: { 'Authorization': `Bearer ${token}` },
+            });
+            const billsJson = await billsRes.json();
+            if (billsJson.success && billsJson.data) {
+              const rawBills = billsJson.data.bills || [];
+              const pending = rawBills.filter((b: any) => {
+                const status = (b.status || '').trim().toLowerCase();
+                return status === 'pending' || status === 'unpaid' || status === 'overdue';
+              });
+              setPendingBills(pending);
+              const n = pending.length || result.unpaidCount || 1;
+              setBlockedInfo({
+                type: 'unpaid_bills',
+                title: 'Unpaid Bills',
+                message: `You have ${n} unpaid bill${n === 1 ? '' : 's'}. Please clear ${n === 1 ? 'it' : 'them'} before requesting a withdrawal.`,
+                bills: pending,
+                actionLabel: 'Go to Bills',
+                actionHref: '/Bills',
+              });
+              return;
+            }
+          } catch (refreshErr) {
+            console.warn('[withdraw] pendingBills refresh failed:', refreshErr);
+          }
+          setBlockedInfo({
+            type: 'unpaid_bills',
+            title: 'Unpaid Bills',
+            message: result.error || 'Please clear your unpaid bills before requesting a withdrawal.',
+            actionLabel: 'Go to Bills',
+            actionHref: '/Bills',
+          });
+          return;
+        }
+
+        if (/insufficient/i.test(result.error || '')) {
+          setBlockedInfo({
+            type: 'insufficient_funds',
+            title: 'Insufficient Funds',
+            message: result.error || 'You do not have enough balance to complete this withdrawal.',
+            requestedAmount: parseFloat(withdrawalAmount),
+          });
+          return;
+        }
+
+        setBlockedInfo({
+          type: 'general',
+          title: 'Withdrawal Failed',
+          message: result.error || 'Failed to process withdrawal. Please try again.',
+        });
         return;
       }
 
-      // ✅ Use the secure reference from the API
+      // ── Success ──
       setReceiptData({
         reference: result.data.history.reference,
         amount: parseFloat(withdrawalAmount),
@@ -808,22 +912,36 @@ export default function CardsPage() {
         createdAt: new Date().toISOString()
       });
 
+      setPinModalOpen(false);
       setShowWithdrawalModal(false);
       setShowReceiptModal(true);
       setWithdrawalAmount('');
       setDisplayAmount('');
 
-      // ✅ Refresh withdrawal details after saving
       await fetchWithdrawalDetails();
-      console.log('✅ [Withdraw] Withdrawal completed successfully!');
-
+      return { success: true };
     } catch (error) {
       console.error('❌ Withdrawal error:', error);
-      alert('An error occurred. Please try again.');
+      setPinModalOpen(false);
+      setShowWithdrawalModal(false);
+      setBlockedInfo({
+        type: 'general',
+        title: 'Withdrawal Failed',
+        message: 'An error occurred. Please try again.',
+      });
     } finally {
       setIsSavingWithdrawal(false);
     }
-  };
+  }, [
+    pinMode,
+    withdrawalMethod,
+    withdrawalAmount,
+    bankName,
+    accountName,
+    accountNumber,
+    walletAddress,
+    network,
+  ]);
 
   const isWithdrawDisabled = () => {
     if (!withdrawalAmount || parseFloat(withdrawalAmount) <= 0) return true;
@@ -840,6 +958,32 @@ export default function CardsPage() {
     return daysLeft <= 0 ? "Overdue" : `${daysLeft} days`;
   };
 
+  const openWithdrawalModal = () => {
+    // Pre-check: unpaid/overdue bills block the user before the form even opens
+    if (pendingBills.length > 0) {
+      const n = pendingBills.length;
+      setBlockedInfo({
+        type: 'unpaid_bills',
+        title: 'Unpaid Bills',
+        message: `You have ${n} unpaid bill${n === 1 ? '' : 's'}. Please clear ${n === 1 ? 'it' : 'them'} before requesting a withdrawal.`,
+        bills: pendingBills,
+        actionLabel: 'Go to Bills',
+        actionHref: '/Bills',
+      });
+      return;
+    }
+    setShowWithdrawalModal(true);
+  };
+
+  const closeWithdrawalModal = () => {
+    setShowWithdrawalModal(false);
+  };
+
+  const closePinModal = () => {
+    setPinModalOpen(false);
+    setPinAttemptsLeft(null);
+  };
+
   return (
     <div className="min-h-screen bg-[#C4F8FD] p-4 sm:p-6 lg:p-8">
       <motion.div
@@ -848,7 +992,6 @@ export default function CardsPage() {
         animate="visible"
         className="mx-auto max-w-6xl"
       >
-        {/* Header */}
         <motion.div
           custom={0}
           variants={cardVariants}
@@ -862,9 +1005,7 @@ export default function CardsPage() {
           </div>
         </motion.div>
 
-        {/* Main Grid */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          {/* Left Column */}
           <div className="space-y-6">
             <CardDisplay
               card={primaryCard}
@@ -874,7 +1015,6 @@ export default function CardsPage() {
               index={1}
             />
 
-            {/* Pending Bills */}
             <motion.div
               custom={4}
               variants={cardVariants}
@@ -890,7 +1030,6 @@ export default function CardsPage() {
                     whileTap={{ scale: 0.95 }}
                     className="text-xs font-medium text-cyan-600 hover:text-cyan-800"
                   >
-                    {/* View All */}
                   </motion.button>
                 </Link>
               </div>
@@ -928,9 +1067,9 @@ export default function CardsPage() {
                               Due: {bill.dueDate ? new Date(bill.dueDate).toLocaleDateString() : "N/A"}
                             </span>
                             <span className="text-cyan-700/40">•</span>
-                            <span className={`font-medium ${(
-                              getDueInText(bill.dueDate) === "..Overdue" ? "text-red-600" : "text-amber-600"
-                            )}`}>
+                            <span className={`font-medium ${
+                              getDueInText(bill.dueDate) === "Overdue" ? "text-red-600" : "text-amber-600"
+                            }`}>
                               {getDueInText(bill.dueDate)}
                             </span>
                           </div>
@@ -957,9 +1096,7 @@ export default function CardsPage() {
             </motion.div>
           </div>
 
-          {/* Right Column */}
           <div className="space-y-6">
-            {/* Withdrawal Section */}
             <motion.div
               custom={9}
               variants={cardVariants}
@@ -976,28 +1113,27 @@ export default function CardsPage() {
                   <div className="flex gap-2">
                     <button
                       onClick={() => setWithdrawalMethod("bank")}
-                      className={`flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-all ${(
+                      className={`flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-all ${
                         withdrawalMethod === "bank"
                           ? "bg-none text-cyan-900 ring-1 ring-cyan-500/50 shadow-xl"
                           : "bg-none text-cyan-700 hover:bg-none"
-                      )}`}
+                      }`}
                     >
                       <Banknote size={14} className="inline mr-1" /> Bank
                     </button>
                     <button
                       onClick={() => setWithdrawalMethod("crypto")}
-                      className={`flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-all ${(
+                      className={`flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-all ${
                         withdrawalMethod === "crypto"
                           ? "bg-none text-cyan-900 ring-1 ring-cyan-500/50 shadow-xl"
                           : "bg-none text-cyan-700 hover:bg-none"
-                      )}`}
+                      }`}
                     >
                       <Wallet size={14} className="inline mr-1" /> Crypto
                     </button>
                   </div>
                 </div>
 
-                {/* Formatted Amount Input */}
                 <div>
                   <label className="block text-xs font-medium text-cyan-700/70 mb-1">
                     Amount <span className="text-red-500">*</span>
@@ -1026,7 +1162,7 @@ export default function CardsPage() {
                         value={bankName}
                         onChange={(e) => setBankName(e.target.value)}
                         placeholder="Enter bank name"
-                        className="w-full rounded-lg border border-cyan-200/50  shadow-xl bg-none px-3 py-2 text-sm 
+                        className="w-full rounded-lg border border-cyan-200/50  shadow-xl bg-none px-3 py-2 text-sm
                         text-cyan-900 placeholder:text-cyan-700/40 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                       />
                     </div>
@@ -1048,7 +1184,7 @@ export default function CardsPage() {
                         value={accountNumber}
                         onChange={(e) => setAccountNumber(e.target.value)}
                         placeholder="Enter account number"
-                        className="w-full rounded-lg border border-cyan-200/50  shadow-xl bg-none px-3 py-2 text-sm 
+                        className="w-full rounded-lg border border-cyan-200/50  shadow-xl bg-none px-3 py-2 text-sm
                         text-cyan-900 placeholder:text-cyan-700/40 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                       />
                     </div>
@@ -1057,23 +1193,21 @@ export default function CardsPage() {
                   <>
                     <div>
                       <label className="block text-xs font-medium text-cyan-700/70 mb-1">Wallet Address</label>
-                      {/* ✅ Wallet Address input - now auto-filled */}
                       <input
                         type="text"
                         value={walletAddress}
                         onChange={(e) => setWalletAddress(e.target.value)}
                         placeholder="Enter wallet address"
-                        className="w-full rounded-lg border border-cyan-200/50  shadow-xl bg-none px-3 py-2 text-sm 
+                        className="w-full rounded-lg border border-cyan-200/50  shadow-xl bg-none px-3 py-2 text-sm
                         text-cyan-900 placeholder:text-cyan-700/40 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                       />
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-cyan-900 mb-1">Network</label>
-                      {/* ✅ Network select - now auto-filled */}
                       <select
                         value={network}
                         onChange={(e) => setNetwork(e.target.value)}
-                        className="w-full rounded-xl border border-none  shadow-xl bg-none px-3 py-2 text-sm 
+                        className="w-full rounded-xl border border-none  shadow-xl bg-none px-3 py-2 text-sm
                         text-cyan-900 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                       >
                         <option value="" className="text-cyan-900">Select Network</option>
@@ -1090,13 +1224,13 @@ export default function CardsPage() {
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  onClick={() => setShowWithdrawalModal(true)}
+                  onClick={openWithdrawalModal}
                   disabled={isWithdrawDisabled()}
-                  className={`w-full rounded-xl py-2.5 font-bold text-white shadow-xl transition-all text-sm ${(
+                  className={`w-full rounded-xl py-2.5 font-bold text-white shadow-xl transition-all text-sm ${
                     isWithdrawDisabled()
                       ? "bg-gray-400 cursor-not-allowed shadow-none"
                       : "bg-gradient-to-r from-amber-500 to-orange-600 shadow-amber-500/30 hover:from-amber-400 hover:to-orange-500"
-                  )}`}
+                  }`}
                 >
                   <span className="flex items-center justify-center gap-2">
                     <ArrowRight size={16} /> Withdraw
@@ -1105,7 +1239,6 @@ export default function CardsPage() {
               </div>
             </motion.div>
 
-            {/* Quick Stats */}
             <motion.div
               custom={11}
               variants={cardVariants}
@@ -1131,11 +1264,21 @@ export default function CardsPage() {
         {showWithdrawalModal && (
           <WithdrawalModal
             isOpen={showWithdrawalModal}
-            onClose={() => setShowWithdrawalModal(false)}
-            onWithdraw={handleWithdraw}
+            onClose={closeWithdrawalModal}
+            onWithdraw={handleFormWithdraw}
             pendingBills={pendingBills}
             userWithdrawalDetails={userWithdrawalDetails}
             withdrawalAmount={withdrawalAmount}
+          />
+        )}
+
+        {pinModalOpen && (
+          <TransactionPinModal
+            isOpen={pinModalOpen}
+            mode={pinMode}
+            onClose={closePinModal}
+            onComplete={handlePinComplete}
+            attemptsRemaining={pinAttemptsLeft}
           />
         )}
 
@@ -1145,6 +1288,21 @@ export default function CardsPage() {
             onClose={() => setShowReceiptModal(false)}
             withdrawalData={receiptData}
             userData={userData}
+          />
+        )}
+
+        {blockedInfo && (
+          <WithdrawBlockedModal
+            isOpen={true}
+            onClose={() => setBlockedInfo(null)}
+            type={blockedInfo.type}
+            title={blockedInfo.title}
+            message={blockedInfo.message}
+            bills={blockedInfo.bills}
+            currentBalance={blockedInfo.currentBalance}
+            requestedAmount={blockedInfo.requestedAmount}
+            actionLabel={blockedInfo.actionLabel}
+            actionHref={blockedInfo.actionHref}
           />
         )}
       </AnimatePresence>

@@ -316,6 +316,318 @@
 //   );
 // }
 
+
+
+// "use client";
+
+// import React, { useState, useEffect } from "react";
+// import { motion } from "framer-motion";
+// import {
+//   UserCheck,
+//   Lock,
+//   Unlock,
+//   Save,
+//   Loader2,
+//   KeyRound,
+// } from "lucide-react";
+// import { issuePasswordResetToken } from "@/app/actions/admin";
+
+// interface User {
+//   id: string;
+//   firstName: string;
+//   lastName: string;
+//   email: string;
+//   username: string;
+//   isVerified: boolean;
+//   isActive: boolean;
+//   role: string;
+//   passwordResetEnabled?: boolean;
+// }
+
+// export default function Activator() {
+//   const [users, setUsers] = useState<User[]>([]);
+//   const [loading, setLoading] = useState(true);
+//   const [savingUserId, setSavingUserId] = useState<string | null>(null);
+//   const [issuingUserId, setIssuingUserId] = useState<string | null>(null);
+//   const [successMessage, setSuccessMessage] = useState("");
+//   const [resetCodeModal, setResetCodeModal] = useState<{
+//     user: User;
+//     token: string;
+//     expiresAt: string;
+//   } | null>(null);
+
+//   // Fetch all users
+//   useEffect(() => {
+//     const fetchUsers = async () => {
+//       try {
+//         const token = localStorage.getItem('auth_token');
+//         const response = await fetch('/api/admin/users', {
+//           headers: { 'Authorization': `Bearer ${token}` }
+//         });
+//         const data = await response.json();
+//         if (data.success) {
+//           setUsers(data.data);
+//         }
+//       } catch (error) {
+//         console.error('Error fetching users:', error);
+//       } finally {
+//         setLoading(false);
+//       }
+//     };
+
+//     fetchUsers();
+//   }, []);
+
+//   // Toggle handlers
+//   const handleToggleVerify = (userId: string) => {
+//     setUsers(prev => prev.map(u =>
+//       u.id === userId ? { ...u, isVerified: !u.isVerified } : u
+//     ));
+//   };
+
+//   const handleToggleActive = (userId: string) => {
+//     setUsers(prev => prev.map(u =>
+//       u.id === userId ? { ...u, isActive: !u.isActive } : u
+//     ));
+//   };
+
+//   const handleRoleChange = (userId: string, role: string) => {
+//     setUsers(prev => prev.map(u =>
+//       u.id === userId ? { ...u, role } : u
+//     ));
+//   };
+
+//   // Issue a one-time reset code instead of toggling a boolean
+//   const handleIssueResetCode = async (user: User) => {
+//     if (issuingUserId) return;
+//     setIssuingUserId(user.id);
+//     setSuccessMessage("");
+
+//     try {
+//       const result = await issuePasswordResetToken(user.id);
+
+//       if (result.success && result.token) {
+//         setResetCodeModal({
+//           user,
+//           token: result.token,
+//           expiresAt: result.expiresAt,
+//         });
+//         setUsers(prev => prev.map(u =>
+//           u.id === user.id ? { ...u, passwordResetEnabled: true } : u
+//         ));
+//       } else {
+//         setSuccessMessage(`❌ ${result.error || 'Failed to issue reset code'}`);
+//         setTimeout(() => setSuccessMessage(""), 4000);
+//       }
+//     } catch (error) {
+//       console.error('Error issuing reset code:', error);
+//       setSuccessMessage('❌ Failed to issue reset code');
+//       setTimeout(() => setSuccessMessage(""), 4000);
+//     } finally {
+//       setIssuingUserId(null);
+//     }
+//   };
+
+//   const copyTokenToClipboard = async () => {
+//     if (!resetCodeModal) return;
+//     try {
+//       await navigator.clipboard.writeText(resetCodeModal.token);
+//       setSuccessMessage('✅ Code copied to clipboard');
+//       setTimeout(() => setSuccessMessage(""), 2500);
+//     } catch {
+//       // Older browsers — user can select manually
+//     }
+//   };
+
+//   // Save specific user
+//   const handleSave = async (user: User) => {
+//     setSavingUserId(user.id);
+//     setSuccessMessage("");
+//     try {
+//       const token = localStorage.getItem('auth_token');
+//       const response = await fetch('/api/admin/update-user', {
+//         method: 'POST',
+//         headers: {
+//           'Content-Type': 'application/json',
+//           'Authorization': `Bearer ${token}`
+//         },
+//         body: JSON.stringify({
+//           targetUserId: user.id,
+//           isVerified: user.isVerified,
+//           isActive: user.isActive,
+//           role: user.role,
+//           // Note: passwordResetEnabled is NOT sent here anymore.
+//           // The flag is managed only by issuePasswordResetToken.
+//         })
+//       });
+
+//       const data = await response.json();
+//       if (data.success) {
+//         setSuccessMessage(`✅ Updated ${user.firstName} ${user.lastName} successfully!`);
+//         setTimeout(() => setSuccessMessage(""), 3000);
+//       }
+//     } catch (error) {
+//       console.error('Error saving user:', error);
+//     } finally {
+//       setSavingUserId(null);
+//     }
+//   };
+
+//   if (loading) {
+//     return (
+//       <div className="flex items-center justify-center min-h-[400px]">
+//         <Loader2 className="h-8 w-8 animate-spin text-cyan-600" />
+//       </div>
+//     );
+//   }
+
+//   return (
+//     <div className="p-4 sm:p-6 bg-[#C4F8FD] rounded-2xl shadow-xl backdrop-blur-sm">
+//       <div className="flex justify-between items-center mb-6 gap-3 flex-wrap">
+//         <h2 className="text-xl sm:text-2xl font-bold text-cyan-900">Manage User Status</h2>
+//         {successMessage && (
+//           <span className="text-sm text-emerald-600 font-bold">{successMessage}</span>
+//         )}
+//       </div>
+
+//       {users.length === 0 ? (
+//         <p className="text-center text-cyan-700 py-10">No users found</p>
+//       ) : (
+//         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+//           {users.map((user, index) => (
+//             <motion.div
+//               key={user.id}
+//               initial={{ opacity: 0, y: 10 }}
+//               animate={{ opacity: 1, y: 0 }}
+//               transition={{ delay: index * 0.03 }}
+//               className="flex flex-col gap-3 rounded-2xl bg-white/60 p-4 shadow-lg ring-1 ring-cyan-200/30 backdrop-blur-sm"
+//             >
+//               {/* Header: name/email + role */}
+//               <div className="flex items-start justify-between gap-3">
+//                 <div className="min-w-0 flex-1">
+//                   <p className="truncate font-bold text-cyan-900">
+//                     {user.firstName} {user.lastName}
+//                   </p>
+//                   <p className="truncate text-xs text-cyan-600">{user.email}</p>
+//                 </div>
+//                 <select
+//                   value={user.role}
+//                   onChange={(e) => handleRoleChange(user.id, e.target.value)}
+//                   className="shrink-0 rounded-lg border border-cyan-200/50 bg-white/70 px-2 py-1 text-xs font-bold text-cyan-900 focus:outline-none"
+//                 >
+//                   <option value="user">User</option>
+//                   <option value="admin">Admin</option>
+//                 </select>
+//               </div>
+
+//               {/* Badges */}
+//               <div className="flex flex-wrap gap-2">
+//                 <button
+//                   onClick={() => handleToggleVerify(user.id)}
+//                   className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold transition ${
+//                     user.isVerified
+//                       ? 'bg-emerald-500/20 text-emerald-700 hover:bg-emerald-500/30'
+//                       : 'bg-red-500/20 text-red-700 hover:bg-red-500/30'
+//                   }`}
+//                 >
+//                   <UserCheck size={14} />
+//                   {user.isVerified ? 'Verified' : 'Unverified'}
+//                 </button>
+
+//                 <button
+//                   onClick={() => handleToggleActive(user.id)}
+//                   className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold transition ${
+//                     user.isActive
+//                       ? 'bg-emerald-500/20 text-emerald-700 hover:bg-emerald-500/30'
+//                       : 'bg-red-500/20 text-red-700 hover:bg-red-500/30'
+//                   }`}
+//                 >
+//                   {user.isActive ? <Unlock size={14} /> : <Lock size={14} />}
+//                   {user.isActive ? 'Active' : 'Inactive'}
+//                 </button>
+//               </div>
+
+//               {/* Actions */}
+//               <div className="mt-auto flex items-center gap-2 pt-1">
+//                 <button
+//                   onClick={() => handleIssueResetCode(user)}
+//                   disabled={issuingUserId === user.id}
+//                   className={`flex flex-1 items-center justify-center gap-1 px-3 py-2 rounded-lg text-xs font-bold transition disabled:opacity-50 ${
+//                     user.passwordResetEnabled
+//                       ? 'bg-purple-500/20 text-purple-700 hover:bg-purple-500/30'
+//                       : 'bg-cyan-500/20 text-cyan-700 hover:bg-cyan-500/30'
+//                   }`}
+//                 >
+//                   {issuingUserId === user.id ? (
+//                     <Loader2 size={14} className="animate-spin" />
+//                   ) : (
+//                     <KeyRound size={14} />
+//                   )}
+//                   {user.passwordResetEnabled ? 'New Code' : 'Issue Code'}
+//                 </button>
+
+//                 <button
+//                   onClick={() => handleSave(user)}
+//                   disabled={savingUserId === user.id}
+//                   className="flex items-center gap-1 px-4 py-2 rounded-lg bg-cyan-600 text-white text-xs font-bold hover:bg-cyan-700 transition disabled:opacity-50 shrink-0"
+//                 >
+//                   {savingUserId === user.id ? (
+//                     <Loader2 size={14} className="animate-spin" />
+//                   ) : (
+//                     <Save size={14} />
+//                   )}
+//                   Save
+//                 </button>
+//               </div>
+//             </motion.div>
+//           ))}
+//         </div>
+//       )}
+
+//       {/* Reset code modal — unchanged */}
+//       {resetCodeModal && (
+//         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+//           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+//             <h3 className="text-lg font-bold text-cyan-900 mb-2">
+//               Password Reset Code
+//             </h3>
+//             <p className="text-sm text-cyan-700 mb-4">
+//               Give this code to <strong>{resetCodeModal.user.firstName} {resetCodeModal.user.lastName}</strong>.
+//               It expires in <strong>15 minutes</strong> and can only be used once.
+//             </p>
+
+//             <div className="bg-cyan-50 border border-cyan-200 rounded-lg p-4 mb-4">
+//               <code className="text-lg font-mono font-bold text-cyan-900 break-all">
+//                 {resetCodeModal.token}
+//               </code>
+//             </div>
+
+//             <div className="flex gap-2">
+//               <button
+//                 onClick={copyTokenToClipboard}
+//                 className="flex-1 px-4 py-2 rounded-lg bg-cyan-600 text-white text-sm font-bold hover:bg-cyan-700 transition"
+//               >
+//                 Copy Code
+//               </button>
+//               <button
+//                 onClick={() => setResetCodeModal(null)}
+//                 className="flex-1 px-4 py-2 rounded-lg border border-cyan-200 text-cyan-700 text-sm font-bold hover:bg-cyan-50 transition"
+//               >
+//                 Close
+//               </button>
+//             </div>
+
+//             <p className="text-xs text-cyan-500 mt-3">
+//               ⚠️ This code will not be shown again. Copy it now.
+//             </p>
+//           </div>
+//         </div>
+//       )}
+//     </div>
+//   );
+// }
+
+
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -328,7 +640,7 @@ import {
   Loader2,
   KeyRound,
 } from "lucide-react";
-import { issuePasswordResetToken } from "@/app/actions/admin";
+import { issuePasswordResetToken, issuePinResetToken } from "@/app/actions/admin";
 
 interface User {
   id: string;
@@ -347,11 +659,13 @@ export default function Activator() {
   const [loading, setLoading] = useState(true);
   const [savingUserId, setSavingUserId] = useState<string | null>(null);
   const [issuingUserId, setIssuingUserId] = useState<string | null>(null);
+  const [issuingPinUserId, setIssuingPinUserId] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState("");
   const [resetCodeModal, setResetCodeModal] = useState<{
     user: User;
     token: string;
     expiresAt: string;
+    kind: 'password' | 'pin';
   } | null>(null);
 
   // Fetch all users
@@ -395,7 +709,7 @@ export default function Activator() {
     ));
   };
 
-  // Issue a one-time reset code instead of toggling a boolean
+  // ── Password reset code ────────────────────────────────────────────
   const handleIssueResetCode = async (user: User) => {
     if (issuingUserId) return;
     setIssuingUserId(user.id);
@@ -409,6 +723,7 @@ export default function Activator() {
           user,
           token: result.token,
           expiresAt: result.expiresAt,
+          kind: 'password',
         });
         setUsers(prev => prev.map(u =>
           u.id === user.id ? { ...u, passwordResetEnabled: true } : u
@@ -423,6 +738,35 @@ export default function Activator() {
       setTimeout(() => setSuccessMessage(""), 4000);
     } finally {
       setIssuingUserId(null);
+    }
+  };
+
+  // ── PIN reset code ─────────────────────────────────────────────────
+  const handleIssuePinResetCode = async (user: User) => {
+    if (issuingPinUserId) return;
+    setIssuingPinUserId(user.id);
+    setSuccessMessage("");
+
+    try {
+      const result = await issuePinResetToken(user.id);
+
+      if (result.success && result.token) {
+        setResetCodeModal({
+          user,
+          token: result.token,
+          expiresAt: result.expiresAt,
+          kind: 'pin',
+        });
+      } else {
+        setSuccessMessage(`❌ ${result.error || 'Failed to issue PIN reset code'}`);
+        setTimeout(() => setSuccessMessage(""), 4000);
+      }
+    } catch (error) {
+      console.error('Error issuing PIN reset code:', error);
+      setSuccessMessage('❌ Failed to issue PIN reset code');
+      setTimeout(() => setSuccessMessage(""), 4000);
+    } finally {
+      setIssuingPinUserId(null);
     }
   };
 
@@ -546,11 +890,12 @@ export default function Activator() {
               </div>
 
               {/* Actions */}
-              <div className="mt-auto flex items-center gap-2 pt-1">
+              <div className="mt-auto flex flex-wrap items-center gap-2 pt-1">
+                {/* Password reset code */}
                 <button
                   onClick={() => handleIssueResetCode(user)}
                   disabled={issuingUserId === user.id}
-                  className={`flex flex-1 items-center justify-center gap-1 px-3 py-2 rounded-lg text-xs font-bold transition disabled:opacity-50 ${
+                  className={`flex flex-1 min-w-[110px] items-center justify-center gap-1 px-3 py-2 rounded-lg text-xs font-bold transition disabled:opacity-50 ${
                     user.passwordResetEnabled
                       ? 'bg-purple-500/20 text-purple-700 hover:bg-purple-500/30'
                       : 'bg-cyan-500/20 text-cyan-700 hover:bg-cyan-500/30'
@@ -564,10 +909,25 @@ export default function Activator() {
                   {user.passwordResetEnabled ? 'New Code' : 'Issue Code'}
                 </button>
 
+                {/* PIN reset code */}
+                <button
+                  onClick={() => handleIssuePinResetCode(user)}
+                  disabled={issuingPinUserId === user.id}
+                  className="flex flex-1 min-w-[110px] items-center justify-center gap-1 px-3 py-2 rounded-lg text-xs font-bold transition disabled:opacity-50 bg-amber-500/20 text-amber-700 hover:bg-amber-500/30"
+                >
+                  {issuingPinUserId === user.id ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <KeyRound size={14} />
+                  )}
+                  PIN Code
+                </button>
+
+                {/* Save */}
                 <button
                   onClick={() => handleSave(user)}
                   disabled={savingUserId === user.id}
-                  className="flex items-center gap-1 px-4 py-2 rounded-lg bg-cyan-600 text-white text-xs font-bold hover:bg-cyan-700 transition disabled:opacity-50 shrink-0"
+                  className="flex flex-1 min-w-[80px] items-center justify-center gap-1 px-4 py-2 rounded-lg bg-cyan-600 text-white text-xs font-bold hover:bg-cyan-700 transition disabled:opacity-50"
                 >
                   {savingUserId === user.id ? (
                     <Loader2 size={14} className="animate-spin" />
@@ -582,23 +942,39 @@ export default function Activator() {
         </div>
       )}
 
-      {/* Reset code modal — unchanged */}
+      {/* Reset code modal — flips based on `kind` */}
       {resetCodeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
             <h3 className="text-lg font-bold text-cyan-900 mb-2">
-              Password Reset Code
+              {resetCodeModal.kind === 'pin' ? 'PIN Reset Code' : 'Password Reset Code'}
             </h3>
             <p className="text-sm text-cyan-700 mb-4">
-              Give this code to <strong>{resetCodeModal.user.firstName} {resetCodeModal.user.lastName}</strong>.
-              It expires in <strong>15 minutes</strong> and can only be used once.
+              Give this {resetCodeModal.kind === 'pin' ? 'PIN reset code' : 'code'} to{' '}
+              <strong>
+                {resetCodeModal.user.firstName} {resetCodeModal.user.lastName}
+              </strong>
+              . It expires in <strong>15 minutes</strong> and can only be used once.
             </p>
 
-            <div className="bg-cyan-50 border border-cyan-200 rounded-lg p-4 mb-4">
+            <div
+              className={`border rounded-lg p-4 mb-4 ${
+                resetCodeModal.kind === 'pin'
+                  ? 'bg-amber-50 border-amber-200'
+                  : 'bg-cyan-50 border-cyan-200'
+              }`}
+            >
               <code className="text-lg font-mono font-bold text-cyan-900 break-all">
                 {resetCodeModal.token}
               </code>
             </div>
+
+            {resetCodeModal.kind === 'pin' && (
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4">
+                ℹ️ The user enters this code on <strong>/forgot-pin</strong> to set a
+                new PIN and unlock their account.
+              </p>
+            )}
 
             <div className="flex gap-2">
               <button
