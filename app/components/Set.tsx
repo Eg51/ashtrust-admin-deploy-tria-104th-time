@@ -582,6 +582,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { compressImage } from '@/lib/compressImage';
 import TransactionPinModal, { type PinMode } from '@/app/components/TransactionPinModal';
+import BiometricSetup from '@/app/components/BiometricSetup';
 import { getPinStatus, setTransactionPin, verifyTransactionPin } from '@/app/actions/pin';
 
 // ============================================================================
@@ -1280,6 +1281,9 @@ export default function SettingsPage() {
                 )}
               </div>
             </motion.div>
+
+            {/* ── Phase K: Biometric login card ─────────────────── */}
+            <BiometricSetup />
 
             {/* Analytic */}
             <div className="flex w-60 items-center justify-center md:justify-around h-auto mx-0 my-4 p-0 ">
