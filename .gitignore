@@ -9,45 +9,32 @@
 !.yarn/plugins
 !.yarn/releases
 !.yarn/versions
-
 # testing
 /coverage
-
 # next.js
 /.next/
 /out/
-
 # production
 /build
-
 # misc
 .DS_Store
 *.pem
-
 # debug
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
-
 # env files (can opt-in for committing if needed)
 .env*
-
 # vercel
 .vercel
-
 # typescript
 *.tsbuildinfo
 next-env.d.ts
 .env.local
 .env.production
-_session-notes.md.env.local
-dump/
 dump/
 app/components/ChatWidgett.old.tsx
 app/components/ChatWidgett.tsx.mixed.bak
 app/components/ChatWidgett.tsx.bak
-dump/
-app/components/ChatWidgett.old.tsx
-app/components/ChatWidgett.tsx.mixed.bak
-app/components/ChatWidgett.tsx.bak
+!.env.example
