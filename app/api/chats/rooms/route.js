@@ -266,16 +266,32 @@
 //     );
 //   }
 // }
-
-
 // app/api/chats/rooms/route.js
 import { NextResponse } from 'next/server';
 import { getUserChatRooms, getOrCreateChatRoom } from '@/lib/db/chats';
-import { getUsersCollection } from '@/lib/mongodb';
+import { getUsersCollection, getChatsCollection } from '@/lib/mongodb';
 import { verifyToken, extractToken } from '@/lib/security';
 import { ObjectId } from 'mongodb';
 
 export const runtime = 'nodejs';
+
+// Fetch all admins, formatted for getOrCreateChatRoom
+async function getAllAdminUsers() {
+  const usersCollection = await getUsersCollection();
+  const admins = await usersCollection
+    .find({ role: 'admin' })
+    .project({ _id: 1, displayName: 1, username: 1, firstName: 1 })
+    .toArray();
+
+  return admins.map((a) => ({
+    userId: a._id.toString(),
+    name:
+      a.displayName ||
+      a.username ||
+      a.firstName ||
+      'Admin',
+  }));
+}
 
 export async function GET(request) {
   try {
@@ -321,15 +337,10 @@ export async function POST(request) {
   try {
     const authHeader = request.headers.get('authorization');
     const token = extractToken(authHeader);
-
-    // ✅ Read the body ONCE up front. Next.js buffers the stream, so a
-    // second request.json() call throws "body already read".
     const body = await request.json().catch(() => ({}));
 
     let userId = null;
-    let isGuest = false;
 
-    // ✅ If a valid token exists, use the real user ID
     if (token) {
       const decoded = verifyToken(token);
       if (decoded) {
@@ -337,11 +348,9 @@ export async function POST(request) {
       }
     }
 
-    // ✅ If no token, check for a Guest ID in the body
     if (!userId) {
       if (body.guestId) {
         userId = body.guestId;
-        isGuest = true;
       } else {
         return NextResponse.json(
           { success: false, error: 'Authentication required' },
@@ -351,19 +360,22 @@ export async function POST(request) {
     }
 
     const usersCollection = await getUsersCollection();
-
-    // ✅ Check if current user is an admin
     const currentUser = await usersCollection.findOne({ _id: new ObjectId(userId) });
     const isAdmin = currentUser?.role === 'admin' || currentUser?.isAdmin === true;
 
-    let adminId = null;
+    // Shared model: EVERY room has every admin as a participant.
+    const adminUsers = await getAllAdminUsers();
+    if (adminUsers.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'No admin available' },
+        { status: 404 }
+      );
+    }
+
     let realUserId = userId;
 
     if (isAdmin) {
-      // ✅ ADMIN CHATTING
-      console.log(`🔵 [rooms] Admin ${userId} is starting a chat`);
-
-      // ✅ NEW: admin explicitly picked a user via targetUserId
+      // Admin chatting: pick the target user
       if (body.targetUserId) {
         const targetUser = await usersCollection.findOne({
           _id: new ObjectId(body.targetUserId),
@@ -378,16 +390,13 @@ export async function POST(request) {
         }
 
         realUserId = body.targetUserId;
-        adminId = userId;
-        console.log(`🔵 [rooms] Admin picked user ${realUserId}`);
       } else {
-        // Existing fallback — used by the "Start a Conversation" button
+        // Fall back to first existing room, else first active user
         const existingRooms = await getUserChatRooms(userId);
         if (existingRooms.length > 0) {
           const room = existingRooms[0];
-          const participant = room.participants.find((p) => p.userId !== userId);
-          if (participant) {
-            console.log(`🔵 [rooms] Using existing room with user ${participant.userId}`);
+          const userPart = room.participants.find((p) => p.role === 'user');
+          if (userPart) {
             return NextResponse.json({
               success: true,
               data: { ...room, id: room._id.toString(), _id: undefined },
@@ -401,35 +410,19 @@ export async function POST(request) {
           _id: { $ne: new ObjectId(userId) },
         });
 
-        if (userToChat) {
-          realUserId = userToChat._id.toString();
-          adminId = userId;
-          console.log(`🔵 [rooms] Found user ${realUserId} for admin to chat with`);
-        } else {
+        if (!userToChat) {
           return NextResponse.json(
             { success: false, error: 'No users available to chat with' },
             { status: 404 }
           );
         }
-      }
-    } else {
-      // ✅ REGULAR USER CHATTING: Find the admin
-      console.log(`🔵 [rooms] User ${userId} is starting a chat`);
 
-      const adminUser = await usersCollection.findOne({ role: 'admin' });
-
-      if (!adminUser) {
-        return NextResponse.json(
-          { success: false, error: 'Admin user not found' },
-          { status: 404 }
-        );
+        realUserId = userToChat._id.toString();
       }
-      adminId = adminUser._id.toString();
-      realUserId = userId;
-      console.log(`🔵 [rooms] Found admin ${adminId} for user to chat with`);
     }
+    // Regular user: realUserId stays as userId
 
-    const room = await getOrCreateChatRoom(realUserId, adminId);
+    const room = await getOrCreateChatRoom(realUserId, adminUsers);
 
     return NextResponse.json({
       success: true,

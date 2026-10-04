@@ -352,6 +352,77 @@
 //   the "unpaid bills" modal.
 // - Returns `investments` so Dash.tsx can compute the Assets card total.
 
+
+// import {
+//   requireAuth,
+//   jsonOk,
+//   jsonError,
+//   ApiError,
+// } from '@/lib/api-helpers';
+// import { getDashDataCollection } from '@/lib/mongodb';
+
+// export const runtime = 'nodejs';
+
+// export async function GET(request) {
+//   try {
+//     const { userId } = await requireAuth(request);
+
+//     const dashCollection = await getDashDataCollection();
+//     const dashData = await dashCollection.findOne({ userId });
+
+//     if (!dashData) {
+//       throw new ApiError('Dashboard data not found', 404);
+//     }
+
+//     const bills = Array.isArray(dashData.bills) ? dashData.bills : [];
+
+//     const totalBills = bills.length;
+//     const paidBills = bills.filter((b) => b.status === 'paid').length;
+//     const unpaidBills = bills.filter((b) => b.status === 'unpaid').length;
+//     const overdueBills = bills.filter((b) => b.status === 'overdue').length;
+
+//     const totalSpent = bills
+//       .filter((b) => b.status === 'paid')
+//       .reduce((sum, b) => sum + (Number(b.amount) || 0), 0);
+
+//     return jsonOk({
+//       data: {
+//         totalBalance: dashData.totalBalance || { amount: '0.00', change: '0.0%' },
+//         analysisBalance: dashData.analysisBalance || {
+//           total: '0.00',
+//           stocks: '45%',
+//           crypto: '35%',
+//           etfs: '20%',
+//         },
+//         analysisNote: dashData.analysisNote ?? 0,
+//         analysisSummary: dashData.analysisSummary || '',
+
+//         totalBills,
+//         paidBills,
+//         unpaidBills,
+//         overdueBills,
+//         totalSpent,
+
+//         upcomingBills: dashData.upcomingBills || [],
+//         recentTransactions: dashData.recentTransactions || [],
+//         paymentMethods: dashData.paymentMethods || [],
+//         preferences: dashData.preferences || {},
+//         investments: Array.isArray(dashData.investments) ? dashData.investments : [],
+
+//         // Raw bills — Card.tsx filters this locally for the unpaid-bills modal
+//         bills,
+//       },
+//     });
+//   } catch (error) {
+//     if (error instanceof ApiError) {
+//       return jsonError(error.message, error.status);
+//     }
+//     console.error('[dashboard GET] error:', error);
+//     return jsonError('Server error, please contact support by mail', 500);
+//   }
+// }
+
+// app/api/user/dashboard/route.js
 import {
   requireAuth,
   jsonOk,
@@ -359,6 +430,7 @@ import {
   ApiError,
 } from '@/lib/api-helpers';
 import { getDashDataCollection } from '@/lib/mongodb';
+import { filterBlockingBills, filterPaidBills } from '@/lib/bills';
 
 export const runtime = 'nodejs';
 
@@ -375,23 +447,34 @@ export async function GET(request) {
 
     const bills = Array.isArray(dashData.bills) ? dashData.bills : [];
 
-    const totalBills = bills.length;
-    const paidBills = bills.filter((b) => b.status === 'paid').length;
-    const unpaidBills = bills.filter((b) => b.status === 'unpaid').length;
-    const overdueBills = bills.filter((b) => b.status === 'overdue').length;
+    // Uses shared lib/bills helpers — single source of truth for the
+    // "which bills block a withdrawal" business rule.
+    const blockingBills = filterBlockingBills(bills);
+    const paidBillsArr = filterPaidBills(bills);
 
-    const totalSpent = bills
-      .filter((b) => b.status === 'paid')
-      .reduce((sum, b) => sum + (Number(b.amount) || 0), 0);
+    const totalBills = bills.length;
+    const paidBills = paidBillsArr.length;
+    // `unpaidBills` here means "bills that block a withdrawal" —
+    // the union of pending + unpaid + overdue.
+    const unpaidBills = blockingBills.length;
+    // `overdueBills` is the specific overdue subset, kept for admin display.
+    const overdueBills = bills.filter(
+      (b) => String(b?.status || '').trim().toLowerCase() === 'overdue'
+    ).length;
+
+    const totalSpent = paidBillsArr.reduce(
+      (sum, b) => sum + (Number(b.amount) || 0),
+      0
+    );
 
     return jsonOk({
       data: {
         totalBalance: dashData.totalBalance || { amount: '0.00', change: '0.0%' },
         analysisBalance: dashData.analysisBalance || {
           total: '0.00',
-          stocks: '45%',
-          crypto: '35%',
-          etfs: '20%',
+          stocks: '0%',
+          crypto: '0%',
+          etfs: '0%',
         },
         analysisNote: dashData.analysisNote ?? 0,
         analysisSummary: dashData.analysisSummary || '',

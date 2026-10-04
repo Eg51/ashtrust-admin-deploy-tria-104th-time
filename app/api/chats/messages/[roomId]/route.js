@@ -400,13 +400,20 @@ function isAllowedAttachment(url) {
 
 // ---- GET: list messages --------------------------------------------------
 
+// export async function GET(request, { params }) {
+//   try {
+//     const { userId } = await requireAuth(request);
+
+//     const { roomId } = await params;
+
+//     await requireRoomAccess(roomId, userId);
 export async function GET(request, { params }) {
   try {
-    const { userId } = await requireAuth(request);
+    const { userId, user } = await requireAuth(request);
 
     const { roomId } = await params;
 
-    await requireRoomAccess(roomId, userId);
+    await requireRoomAccess(roomId, userId, user);
 
     const messages = await getRoomMessages(roomId);
 
@@ -426,12 +433,17 @@ export async function GET(request, { params }) {
 
 export async function POST(request, { params }) {
   try {
-    const { userId, user } = await requireAuth(request);
+      const { userId, user } = await requireAuth(request);
 
-    const { roomId } = await params;
+      const { roomId } = await params;
 
-    await requireRoomAccess(roomId, userId);
+      await requireRoomAccess(roomId, userId, user);
+    // const { userId, user } = await requireAuth(request);
 
+    // const { roomId } = await params;
+
+    // await requireRoomAccess(roomId, userId);
+    
     const body = await readJson(request);
     const { message, type = 'text', attachmentUrl } = body || {};
 
@@ -506,11 +518,16 @@ export async function POST(request, { params }) {
 
 export async function DELETE(request, { params }) {
   try {
-    const { userId, user } = await requireAuth(request);
+      const { userId, user } = await requireAuth(request);
 
-    const { roomId } = await params;
+      const { roomId } = await params;
 
-    await requireRoomAccess(roomId, userId);
+      await requireRoomAccess(roomId, userId, user);
+    // const { userId, user } = await requireAuth(request);
+
+    // const { roomId } = await params;
+
+    // await requireRoomAccess(roomId, userId);
 
     const body = await readJson(request);
     const { messageId } = body || {};
