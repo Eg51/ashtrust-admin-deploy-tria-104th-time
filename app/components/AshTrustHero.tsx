@@ -40,9 +40,9 @@ const securityFeatures = [
 ];
 
 const footerLinks = [
-  { label: "Privacy Policy", href: "Policy" },
-  { label: "Security", href: "Policy" },
-  { label: "Legal", href: "Policy" },
+  { label: "Privacy Policy", href: "/Policy" },
+  { label: "Security", href: "/Policy" },
+  { label: "Legal", href: "/Policy" },
 ];
 
 // ---- Animation variants ---------------------------------------------------
@@ -179,7 +179,7 @@ export default function AshTrustHero() {
               {/* 🟢 FIX 2: Centered buttons on mobile/tablet with max width, left-aligned on desktop */}
               <motion.div
                 variants={fadeUp}
-                className="mt-6 flex w-full flex-col items-center justify-center gap-4 sm:flex-row sm:justify-start sm:gap-4"
+                className="mt-6 flex w-full flex-col items-center justify-center gap-4 sm:flex-row sm:justify-center sm:gap-4 lg:justify-start lg:gap-4"
               >
                 <motion.div
                   whileHover={{ scale: 1.04 }}
@@ -236,7 +236,7 @@ export default function AshTrustHero() {
               initial="hidden"
               animate="visible"
               variants={cardsContainer}
-              className="flex flex-col gap-4 sm:gap-5"
+              className="mx-auto flex w-full max-w-md flex-col gap-4 sm:gap-5 lg:mx-0 lg:max-w-none"
             >
               {/* Ash Trust Elite card */}
               <motion.div
@@ -278,16 +278,16 @@ export default function AshTrustHero() {
                     <input
                       type="text"
                       placeholder="Username or Account ID"
-                      className="w-full bg-transparent text-xs text-slate-800 placeholder:text-slate-500 focus:outline-none sm:text-sm"
+                      className="w-full bg-transparent text-base text-slate-800 placeholder:text-slate-500 focus:outline-none sm:text-sm"
                     />
                   </div>
                   <div className="flex items-center gap-2 rounded-md border border-slate-900/10 bg-white/40 px-3 py-2">
                     <Lock size={15} className="text-[#0a0e17]" />
-                    <input
-                      type="password"
-                      placeholder="Passcode"
-                      className="w-full bg-transparent text-xs text-[#0a0e17] placeholder:text-slate-500 focus:outline-none sm:text-sm"
-                    />
+                  <input
+                    type="password"
+                    placeholder="Passcode"
+                    className="w-full bg-transparent text-base text-[#0a0e17] placeholder:text-slate-500 focus:outline-none sm:text-sm"
+                  />
                   </div>
                   
                   <Link
