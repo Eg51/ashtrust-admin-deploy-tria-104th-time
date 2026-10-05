@@ -252,19 +252,19 @@ export const metadata: Metadata = {
   keywords: ["finance", "investments", "bills", "crypto", "banking"],
   icons: {
     icon: '/favicon.ico',
-    apple: '',
+    apple: '/apple-touch-icon.png',
   },
   openGraph: {
     title: 'AshTrust Bank',
-    description: 'Modern Banking. Timeless Trust.',
-    url: "https://just-deploy-rho.vercel.app",
+    description: 'Modern Banking. Timeless Trust',
+    url: "https://www.ashtrustbnk.com",
     siteName: "AshTrust Bank",
     images: [
       {
-        url: "https://just-deploy-rho.vercel.app/preview.png",
+        url: "https://www.ashtrustbnk.com/preview.png",
         width: 1200,
         height: 630,
-        alt: "AshTrust Bank Preview",
+        alt: "Web App Preview",
       },
     ],
     type: "website",
@@ -273,7 +273,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: 'AshTrust Bank',
     description: 'Modern Banking. Timeless Trust.',
-    images: ["https://just-deploy-rho.vercel.app/loadLogo_shield_smooth.png"],
+    images: ["https://https://www.ashtrustbnk.com/loadLogo_shield_smooth.png"],
   },
 };
 
